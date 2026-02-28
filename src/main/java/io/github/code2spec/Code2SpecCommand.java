@@ -19,6 +19,9 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"-o", "--output"}, description = "输出目录", defaultValue = "./output")
     private Path outputDir;
 
+    @CommandLine.Option(names = {"-v", "--verbose"}, description = "打印 LLM 增强各步骤耗时")
+    private boolean verbose;
+
     @CommandLine.Option(names = {"--llm-api-key"}, description = "LLM API Key (OpenAI 兼容)")
     private String llmApiKey;
 
@@ -40,25 +43,35 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"--llm-retry-wait-ms"}, description = "遇到 429 限流时等待毫秒数后重试", defaultValue = "60000")
     private int llmRetryWaitMs = 60000;
 
-    @CommandLine.Option(names = {"--llm-call-chain-depth"}, description = "调用链递归收集深度（接口方法->被调方法->...，0=仅接口方法）", defaultValue = "3")
-    private int llmCallChainDepth = 3;
+    @CommandLine.Option(names = {"--llm-minimal"}, description = "精简模式：仅传接口方法体（约800字），不传调用链，减少 token 与耗时")
+    private boolean llmMinimal;
 
-    @CommandLine.Option(names = {"--llm-method-body-max-chars"}, description = "接口方法体最大字符数", defaultValue = "2000")
-    private int llmMethodBodyMaxChars = 2000;
+    @CommandLine.Option(names = {"--llm-call-chain-depth"}, description = "调用链递归收集深度（接口方法->被调方法->...，0=仅接口方法）", defaultValue = "2")
+    private int llmCallChainDepth = 2;
 
-    @CommandLine.Option(names = {"--llm-call-chain-max-chars"}, description = "调用链总最大字符数", defaultValue = "12000")
-    private int llmCallChainMaxChars = 12000;
+    @CommandLine.Option(names = {"--llm-method-body-max-chars"}, description = "接口方法体最大字符数", defaultValue = "1200")
+    private int llmMethodBodyMaxChars = 1200;
+
+    @CommandLine.Option(names = {"--llm-call-chain-max-chars"}, description = "调用链总最大字符数", defaultValue = "6000")
+    private int llmCallChainMaxChars = 6000;
 
     @Override
     public void run() {
         LlmConfig llmConfig = new LlmConfig();
         llmConfig.setEnabled(!noLlm);
+        llmConfig.setVerbose(verbose);
         llmConfig.setProxy(proxy);
         llmConfig.setLlmDelayMs(llmDelayMs);
         llmConfig.setLlmRetryWaitMs(llmRetryWaitMs);
-        llmConfig.setCallChainDepth(llmCallChainDepth);
-        llmConfig.setMethodBodyMaxChars(llmMethodBodyMaxChars);
-        llmConfig.setCallChainMaxChars(llmCallChainMaxChars);
+        if (llmMinimal) {
+            llmConfig.setCallChainDepth(0);
+            llmConfig.setMethodBodyMaxChars(800);
+            llmConfig.setCallChainMaxChars(0);
+        } else {
+            llmConfig.setCallChainDepth(llmCallChainDepth);
+            llmConfig.setMethodBodyMaxChars(llmMethodBodyMaxChars);
+            llmConfig.setCallChainMaxChars(llmCallChainMaxChars);
+        }
         if (!noLlm && llmApiKey != null && !llmApiKey.isBlank()) {
             llmConfig.setApiKey(llmApiKey);
             llmConfig.setApiBaseUrl(llmApiBase);

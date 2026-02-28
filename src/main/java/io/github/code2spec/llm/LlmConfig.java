@@ -12,9 +12,13 @@ public class LlmConfig {
     private String proxy;
     private int llmDelayMs = 2000;
     private int llmRetryWaitMs = 60000;
-    private int callChainDepth = 3;
-    private int methodBodyMaxChars = 2000;
-    private int callChainMaxChars = 12000;
+    private int callChainDepth = 2;
+    private int methodBodyMaxChars = 1200;
+    private int callChainMaxChars = 6000;
+    private boolean verbose;
+
+    public boolean isVerbose() { return verbose; }
+    public void setVerbose(boolean verbose) { this.verbose = verbose; }
 
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }

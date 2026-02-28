@@ -9,6 +9,24 @@ public class ProgressReporter {
     private long promptTokens;
     private long completionTokens;
     private int llmRequestCount;
+    private final boolean verbose;
+
+    public ProgressReporter() {
+        this(false);
+    }
+
+    public ProgressReporter(boolean verbose) {
+        this.verbose = verbose;
+    }
+
+    /**
+     * 在 -v 模式下打印某步骤耗时。
+     */
+    public void verboseTiming(String step, long ms) {
+        if (verbose) {
+            System.out.println("        [耗时] " + step + ": " + ms + " ms");
+        }
+    }
 
     public void onParseJavaStart(int totalFiles) {
         System.out.println("[1/4] 解析 Java 源码: " + totalFiles + " 个文件");

@@ -68,8 +68,11 @@ public class JavaRestParser {
             }
         }
 
-        CallChainCollector callChainCollector = new CallChainCollector(callChainDepth, callChainMaxChars);
-        callChainCollector.indexCompilationUnits(pathToCu);
+        CallChainCollector callChainCollector = (callChainMaxChars > 0)
+                ? new CallChainCollector(callChainDepth, callChainMaxChars) : null;
+        if (callChainCollector != null) {
+            callChainCollector.indexCompilationUnits(pathToCu);
+        }
 
         int endpointCount = 0;
         for (CompilationUnit cu : pathToCu.values()) {
@@ -365,7 +368,9 @@ public class JavaRestParser {
         ctx.setCalledMethodNames(extractCalledMethods(m));
         if (callChainCollector != null && containingClass != null && cu != null) {
             try {
+                long t0 = System.currentTimeMillis();
                 String callChain = callChainCollector.collectCallChain(m, containingClass, cu);
+                if (progressReporter != null) progressReporter.verboseTiming("收集调用链", System.currentTimeMillis() - t0);
                 if (callChain != null && !callChain.isBlank()) {
                     ctx.setCallChainSnippet(callChain);
                 }

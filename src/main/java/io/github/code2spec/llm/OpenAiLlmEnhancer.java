@@ -33,19 +33,31 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
     public BusinessSemantic enhanceEndpoint(EndpointContext ctx) {
         if (!isEnabled()) return null;
 
+        long t0 = System.currentTimeMillis();
         String prompt = buildEndpointPrompt(ctx);
         List<OpenAiClient.ChatMessage> messages = List.of(
                 new OpenAiClient.ChatMessage("system", getEndpointSystemPrompt()),
                 new OpenAiClient.ChatMessage("user", prompt)
         );
+        if (progressReporter != null) progressReporter.verboseTiming("构建 prompt", System.currentTimeMillis() - t0);
 
         try {
+            long t1 = System.currentTimeMillis();
             delayBeforeLlmRequest();
+            if (progressReporter != null) progressReporter.verboseTiming("请求前延迟", System.currentTimeMillis() - t1);
+
+            long t2 = System.currentTimeMillis();
             OpenAiClient.ChatResult result = client.chat(messages);
+            if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", System.currentTimeMillis() - t2);
+
             if (progressReporter != null && (result.promptTokens > 0 || result.completionTokens > 0)) {
                 progressReporter.addTokens(result.promptTokens, result.completionTokens);
             }
-            return parseBusinessSemantic(result.content);
+
+            long t3 = System.currentTimeMillis();
+            BusinessSemantic semantic = parseBusinessSemantic(result.content);
+            if (progressReporter != null) progressReporter.verboseTiming("解析响应", System.currentTimeMillis() - t3);
+            return semantic;
         } catch (Exception e) {
             // Log and return null on failure - fallback to rule-only output
             return null;
@@ -56,19 +68,30 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
     public void enhanceErrorCode(ErrorCode errorCode, ErrorCodeContext ctx) {
         if (!isEnabled()) return;
 
+        long t0 = System.currentTimeMillis();
         String prompt = buildErrorCodePrompt(ctx);
         List<OpenAiClient.ChatMessage> messages = List.of(
                 new OpenAiClient.ChatMessage("system", getErrorCodeSystemPrompt()),
                 new OpenAiClient.ChatMessage("user", prompt)
         );
+        if (progressReporter != null) progressReporter.verboseTiming("构建 prompt", System.currentTimeMillis() - t0);
 
         try {
+            long t1 = System.currentTimeMillis();
             delayBeforeLlmRequest();
+            if (progressReporter != null) progressReporter.verboseTiming("请求前延迟", System.currentTimeMillis() - t1);
+
+            long t2 = System.currentTimeMillis();
             OpenAiClient.ChatResult result = client.chat(messages);
+            if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", System.currentTimeMillis() - t2);
+
             if (progressReporter != null && (result.promptTokens > 0 || result.completionTokens > 0)) {
                 progressReporter.addTokens(result.promptTokens, result.completionTokens);
             }
+
+            long t3 = System.currentTimeMillis();
             parseAndApplyErrorCodeEnhancement(result.content, errorCode);
+            if (progressReporter != null) progressReporter.verboseTiming("解析响应", System.currentTimeMillis() - t3);
         } catch (Exception e) {
             // Log and skip enhancement on failure
         }
@@ -109,11 +132,11 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         if (ctx.getMethodBodySnippet() != null && !ctx.getMethodBodySnippet().isBlank()) {
             sb.append("- 方法体片段:\n```\n").append(truncate(ctx.getMethodBodySnippet(), methodBodyMax)).append("\n```\n");
         }
-        if (ctx.getCalledMethodNames() != null && !ctx.getCalledMethodNames().isEmpty()) {
+        int callChainMax = config.getCallChainMaxChars();
+        if (callChainMax > 0 && ctx.getCalledMethodNames() != null && !ctx.getCalledMethodNames().isEmpty()) {
             sb.append("- 调用的方法: ").append(String.join(", ", ctx.getCalledMethodNames())).append("\n");
         }
-        int callChainMax = config.getCallChainMaxChars();
-        if (ctx.getCallChainSnippet() != null && !ctx.getCallChainSnippet().isBlank()) {
+        if (callChainMax > 0 && ctx.getCallChainSnippet() != null && !ctx.getCallChainSnippet().isBlank()) {
             sb.append("- 完整调用链代码:\n```\n").append(truncate(ctx.getCallChainSnippet(), callChainMax)).append("\n```\n");
         }
         sb.append("\n请生成 JSON 格式的业务语义描述。");
