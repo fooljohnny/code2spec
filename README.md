@@ -94,10 +94,11 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-api -o ./outpu
 - **路径**：`@RequestMapping`、`@GetMapping`、`@PostMapping`、`@PutMapping`、`@DeleteMapping`、`@PatchMapping`
 - **参数**：`@PathVariable`、`@RequestParam`、`@RequestBody`
 
-**JAX-RS**：
-- **资源**：`@Path`（类与方法级别）
+**JAX-RS / ServiceComb**：
+- **资源**：`@Path`（类与方法级别）、`@RestSchema`（ServiceComb）
 - **HTTP 方法**：`@GET`、`@POST`、`@PUT`、`@DELETE`、`@PATCH`、`@HEAD`、`@OPTIONS`
-- **参数**：`@PathParam`、`@QueryParam`、`@HeaderParam`、`@FormParam`（无注解参数视为请求体）
+- **参数**：`@PathParam`、`@QueryParam`、`@HeaderParam`、`@FormParam`（无注解且非 Servlet 类型视为请求体）
+- **兼容**：`javax.ws.rs` 与 `jakarta.ws.rs`（按注解简单名匹配）
 
 **异常**：`@ExceptionHandler`（在 `@ControllerAdvice` / `@RestControllerAdvice` 中）
 
