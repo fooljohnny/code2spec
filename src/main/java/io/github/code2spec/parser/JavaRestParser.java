@@ -17,6 +17,8 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.LinkedHashMap;
 import java.util.Set;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -27,24 +29,30 @@ public class JavaRestParser {
     private final ProgressReporter progressReporter;
     private final int callChainDepth;
     private final int callChainMaxChars;
+    private final int llmConcurrency;
 
     public JavaRestParser(LlmEnhancer llmEnhancer) {
-        this(llmEnhancer, null, 3, 12000);
+        this(llmEnhancer, null, 3, 12000, 3);
     }
 
     public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter) {
-        this(llmEnhancer, progressReporter, 3, 12000);
+        this(llmEnhancer, progressReporter, 3, 12000, 3);
     }
 
     public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth) {
-        this(llmEnhancer, progressReporter, callChainDepth, 12000);
+        this(llmEnhancer, progressReporter, callChainDepth, 12000, 3);
     }
 
     public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth, int callChainMaxChars) {
+        this(llmEnhancer, progressReporter, callChainDepth, callChainMaxChars, 3);
+    }
+
+    public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth, int callChainMaxChars, int llmConcurrency) {
         this.llmEnhancer = llmEnhancer;
         this.progressReporter = progressReporter;
         this.callChainDepth = callChainDepth;
         this.callChainMaxChars = callChainMaxChars;
+        this.llmConcurrency = Math.max(1, llmConcurrency);
     }
 
     public SpecResult parse(Path sourceRoot) throws Exception {
@@ -71,13 +79,14 @@ public class JavaRestParser {
         CallChainCollector callChainCollector = new CallChainCollector(callChainDepth, callChainMaxChars);
         callChainCollector.indexCompilationUnits(pathToCu);
 
-        int endpointCount = 0;
+        List<EndpointEnhancementTask> endpointTasks = new ArrayList<>();
         for (CompilationUnit cu : pathToCu.values()) {
-            endpointCount = extractEndpoints(cu, result, endpointCount, callChainCollector);
+            extractEndpoints(cu, result, endpointTasks, callChainCollector);
             extractErrorHandlers(cu, result);
         }
 
-        enhanceErrorCodes(result);
+        enhanceEndpointsInParallel(endpointTasks);
+        enhanceErrorCodesInParallel(result);
 
         return result;
     }
@@ -92,8 +101,7 @@ public class JavaRestParser {
         return files;
     }
 
-    private int extractEndpoints(CompilationUnit cu, SpecResult result, int endpointCount, CallChainCollector callChainCollector) {
-        int[] count = new int[] { endpointCount };
+    private void extractEndpoints(CompilationUnit cu, SpecResult result, List<EndpointEnhancementTask> endpointTasks, CallChainCollector callChainCollector) {
         cu.accept(new VoidVisitorAdapter<Void>() {
             @Override
             public void visit(ClassOrInterfaceDeclaration c, Void arg) {
@@ -104,21 +112,58 @@ public class JavaRestParser {
                     if (ep == null) ep = extractJaxRsEndpoint(m, classPath);
                     if (ep != null) {
                         EndpointContext ctx = buildEndpointContext(m, ep, c, cu, callChainCollector);
-                        if (llmEnhancer != null && llmEnhancer.isEnabled()) {
-                            if (progressReporter != null) {
-                                progressReporter.onLlmEndpointStart(++count[0], 0, ep.getHttpMethod() + " " + ep.getUri());
-                            }
-                            BusinessSemantic semantic = llmEnhancer.enhanceEndpoint(ctx);
-                            ep.setBusinessSemantic(semantic);
-                        }
                         result.getEndpoints().add(ep);
+                        if (llmEnhancer != null && llmEnhancer.isEnabled()) {
+                            endpointTasks.add(new EndpointEnhancementTask(ep, ctx));
+                        }
                     }
                 }
                 super.visit(c, arg);
             }
         }, null);
-        return count[0];
     }
+
+    private void enhanceEndpointsInParallel(List<EndpointEnhancementTask> tasks) {
+        if (tasks.isEmpty()) return;
+        int total = tasks.size();
+        AtomicInteger done = new AtomicInteger(0);
+        ExecutorService executor = Executors.newFixedThreadPool(llmConcurrency);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (EndpointEnhancementTask task : tasks) {
+                futures.add(executor.submit(() -> {
+                    try {
+                        BusinessSemantic semantic = llmEnhancer.enhanceEndpoint(task.ctx);
+                        task.ep.setBusinessSemantic(semantic);
+                    } catch (Exception ignored) {
+                    } finally {
+                        int n = done.incrementAndGet();
+                        if (progressReporter != null) {
+                            progressReporter.onLlmEndpointStart(n, total, task.ep.getHttpMethod() + " " + task.ep.getUri());
+                        }
+                    }
+                }));
+            }
+            for (Future<?> f : futures) {
+                try {
+                    f.get(10, TimeUnit.MINUTES);
+                } catch (Exception e) {
+                    if (e.getCause() != null) {
+                        e.getCause().printStackTrace();
+                    }
+                }
+            }
+        } finally {
+            executor.shutdown();
+            try {
+                executor.awaitTermination(1, TimeUnit.HOURS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private record EndpointEnhancementTask(Endpoint ep, EndpointContext ctx) {}
 
     private boolean isRestResource(ClassOrInterfaceDeclaration c) {
         return c.getAnnotationByName("RestController").isPresent()
@@ -490,23 +535,54 @@ public class JavaRestParser {
         return 500;
     }
 
-    private void enhanceErrorCodes(SpecResult result) {
+    private void enhanceErrorCodesInParallel(SpecResult result) {
         var errorCodes = result.getErrorCodes();
-        int total = errorCodes.size();
-        for (int i = 0; i < total; i++) {
-            ErrorCode ec = errorCodes.get(i);
+        if (errorCodes.isEmpty() || llmEnhancer == null || !llmEnhancer.isEnabled()) return;
+
+        List<ErrorCodeEnhancementTask> tasks = new ArrayList<>();
+        for (ErrorCode ec : errorCodes) {
             ErrorCodeContext ctx = new ErrorCodeContext();
             ctx.setCode(ec.getCode());
             ctx.setMessage(ec.getMessage());
             ctx.setHttpStatus(ec.getHttpStatus());
             ctx.setExceptionType(ec.getExceptionType());
             ctx.setExceptionHandlerSnippet(errorHandlerSnippets.getOrDefault(ec.getCode(), ""));
-            if (llmEnhancer != null && llmEnhancer.isEnabled()) {
-                if (progressReporter != null) {
-                    progressReporter.onLlmErrorCodeStart(i + 1, total, ec.getCode());
+            tasks.add(new ErrorCodeEnhancementTask(ec, ctx));
+        }
+
+        int total = tasks.size();
+        AtomicInteger done = new AtomicInteger(0);
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(llmConcurrency, total));
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (ErrorCodeEnhancementTask task : tasks) {
+                futures.add(executor.submit(() -> {
+                    try {
+                        llmEnhancer.enhanceErrorCode(task.ec, task.ctx);
+                    } catch (Exception ignored) {
+                    } finally {
+                        int n = done.incrementAndGet();
+                        if (progressReporter != null) {
+                            progressReporter.onLlmErrorCodeStart(n, total, task.ec.getCode());
+                        }
+                    }
+                }));
+            }
+            for (Future<?> f : futures) {
+                try {
+                    f.get(5, TimeUnit.MINUTES);
+                } catch (Exception ignored) {
                 }
-                llmEnhancer.enhanceErrorCode(ec, ctx);
+            }
+        } finally {
+            executor.shutdown();
+            try {
+                executor.awaitTermination(10, TimeUnit.MINUTES);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
     }
+
+    private record ErrorCodeEnhancementTask(ErrorCode ec, ErrorCodeContext ctx) {}
 }

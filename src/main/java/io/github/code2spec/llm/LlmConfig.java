@@ -15,6 +15,8 @@ public class LlmConfig {
     private int callChainDepth = 3;
     private int methodBodyMaxChars = 2000;
     private int callChainMaxChars = 12000;
+    private int llmConcurrency = 3;
+    private int llmReadTimeoutSeconds = 120;
 
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
@@ -48,4 +50,10 @@ public class LlmConfig {
 
     public int getCallChainMaxChars() { return callChainMaxChars; }
     public void setCallChainMaxChars(int callChainMaxChars) { this.callChainMaxChars = callChainMaxChars; }
+
+    public int getLlmConcurrency() { return llmConcurrency; }
+    public void setLlmConcurrency(int llmConcurrency) { this.llmConcurrency = llmConcurrency; }
+
+    public int getLlmReadTimeoutSeconds() { return llmReadTimeoutSeconds; }
+    public void setLlmReadTimeoutSeconds(int llmReadTimeoutSeconds) { this.llmReadTimeoutSeconds = llmReadTimeoutSeconds; }
 }

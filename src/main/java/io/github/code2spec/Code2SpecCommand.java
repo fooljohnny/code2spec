@@ -49,6 +49,12 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"--llm-call-chain-max-chars"}, description = "调用链总最大字符数", defaultValue = "12000")
     private int llmCallChainMaxChars = 12000;
 
+    @CommandLine.Option(names = {"--llm-concurrency"}, description = "LLM 请求并发数（提高可加速，但可能触发 429 限流）", defaultValue = "3")
+    private int llmConcurrency = 3;
+
+    @CommandLine.Option(names = {"--llm-read-timeout"}, description = "LLM 单次请求读超时秒数（复杂 prompt 可适当增大）", defaultValue = "120")
+    private int llmReadTimeoutSeconds = 120;
+
     @Override
     public void run() {
         LlmConfig llmConfig = new LlmConfig();
@@ -59,6 +65,8 @@ public class Code2SpecCommand implements Runnable {
         llmConfig.setCallChainDepth(llmCallChainDepth);
         llmConfig.setMethodBodyMaxChars(llmMethodBodyMaxChars);
         llmConfig.setCallChainMaxChars(llmCallChainMaxChars);
+        llmConfig.setLlmConcurrency(llmConcurrency);
+        llmConfig.setLlmReadTimeoutSeconds(llmReadTimeoutSeconds);
         if (!noLlm && llmApiKey != null && !llmApiKey.isBlank()) {
             llmConfig.setApiKey(llmApiKey);
             llmConfig.setApiBaseUrl(llmApiBase);

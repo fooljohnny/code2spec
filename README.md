@@ -96,6 +96,8 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | `--llm-call-chain-depth` | 调用链递归收集深度（0=仅接口方法） | 3 |
 | `--llm-method-body-max-chars` | 接口方法体最大字符数 | 2000 |
 | `--llm-call-chain-max-chars` | 调用链总最大字符数 | 12000 |
+| `--llm-concurrency` | LLM 请求并发数（提高可加速，可能触发 429） | 3 |
+| `--llm-read-timeout` | 单次 LLM 请求读超时秒数 | 120 |
 
 ## 支持的输入
 

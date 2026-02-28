@@ -52,7 +52,7 @@ public class ProgressReporter {
         }
     }
 
-    public void addTokens(int prompt, int completion) {
+    public synchronized void addTokens(int prompt, int completion) {
         this.promptTokens += prompt;
         this.completionTokens += completion;
         this.llmRequestCount++;
