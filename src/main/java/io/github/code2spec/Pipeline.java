@@ -28,7 +28,8 @@ public class Pipeline {
     }
 
     public void run() throws Exception {
-        ProgressReporter progress = new ProgressReporter();
+        boolean verbose = llmConfig != null && llmConfig.isVerbose();
+        ProgressReporter progress = new ProgressReporter(verbose);
         LlmEnhancer enhancer = createEnhancer(progress);
         int callChainDepth = llmConfig != null ? llmConfig.getCallChainDepth() : 2;
         int callChainMaxChars = llmConfig != null ? llmConfig.getCallChainMaxChars() : 6000;

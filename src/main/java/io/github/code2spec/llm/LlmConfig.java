@@ -15,6 +15,10 @@ public class LlmConfig {
     private int callChainDepth = 2;
     private int methodBodyMaxChars = 1200;
     private int callChainMaxChars = 6000;
+    private boolean verbose;
+
+    public boolean isVerbose() { return verbose; }
+    public void setVerbose(boolean verbose) { this.verbose = verbose; }
 
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }

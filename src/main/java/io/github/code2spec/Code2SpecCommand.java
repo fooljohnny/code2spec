@@ -19,6 +19,9 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"-o", "--output"}, description = "输出目录", defaultValue = "./output")
     private Path outputDir;
 
+    @CommandLine.Option(names = {"-v", "--verbose"}, description = "打印 LLM 增强各步骤耗时")
+    private boolean verbose;
+
     @CommandLine.Option(names = {"--llm-api-key"}, description = "LLM API Key (OpenAI 兼容)")
     private String llmApiKey;
 
@@ -56,6 +59,7 @@ public class Code2SpecCommand implements Runnable {
     public void run() {
         LlmConfig llmConfig = new LlmConfig();
         llmConfig.setEnabled(!noLlm);
+        llmConfig.setVerbose(verbose);
         llmConfig.setProxy(proxy);
         llmConfig.setLlmDelayMs(llmDelayMs);
         llmConfig.setLlmRetryWaitMs(llmRetryWaitMs);

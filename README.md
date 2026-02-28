@@ -86,6 +86,7 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | 参数 | 说明 | 默认值 |
 |-----|------|--------|
 | `-o, --output` | 输出目录 | `./output` |
+| `-v, --verbose` | 打印 LLM 增强各步骤耗时（构建 prompt、请求前延迟、LLM 请求、解析响应等） | - |
 | `--llm-api-key` | LLM API Key | 环境变量 `OPENAI_API_KEY` |
 | `--llm-api-base` | API 基础 URL | `https://api.openai.com/v1` |
 | `--llm-model` | 模型名称 | `gpt-4o-mini` |
