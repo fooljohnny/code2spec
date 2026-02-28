@@ -76,6 +76,17 @@ public class ProgressReporter {
         this.llmRequestCount++;
     }
 
+    /**
+     * 记录并打印每次 LLM 调用统计（调用序号、目标、token 消耗）。
+     */
+    public synchronized void reportLlmCall(String type, String target, int promptTokens, int completionTokens) {
+        this.promptTokens += promptTokens;
+        this.completionTokens += completionTokens;
+        this.llmRequestCount++;
+        System.out.println("      [LLM 调用 " + llmRequestCount + "] " + type + " " + target
+                + "  prompt=" + promptTokens + " completion=" + completionTokens + " total=" + (promptTokens + completionTokens));
+    }
+
     public long getPromptTokens() { return promptTokens; }
     public long getCompletionTokens() { return completionTokens; }
     public long getTotalTokens() { return promptTokens + completionTokens; }
