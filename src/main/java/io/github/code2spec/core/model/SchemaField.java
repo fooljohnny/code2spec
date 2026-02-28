@@ -1,11 +1,10 @@
 package io.github.code2spec.core.model;
 
 /**
- * Request parameter (path, query, header).
+ * Schema field for request/response body with constraints.
  */
-public class Parameter {
+public class SchemaField {
     private String name;
-    private String in;  // path, query, header
     private String type;
     private boolean required;
     private String description;
@@ -15,12 +14,10 @@ public class Parameter {
     private Integer maxLength;
     private String pattern;
     private String format;
+    private String example;
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-
-    public String getIn() { return in; }
-    public void setIn(String in) { this.in = in; }
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
@@ -48,4 +45,7 @@ public class Parameter {
 
     public String getFormat() { return format; }
     public void setFormat(String format) { this.format = format; }
+
+    public String getExample() { return example; }
+    public void setExample(String example) { this.example = example; }
 }

@@ -3,6 +3,7 @@ package io.github.code2spec.llm;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.code2spec.ProgressReporter;
 import io.github.code2spec.core.model.BusinessSemantic;
 import io.github.code2spec.core.model.ErrorCode;
 
@@ -15,10 +16,16 @@ import java.util.List;
 public class OpenAiLlmEnhancer implements LlmEnhancer {
     private final OpenAiClient client;
     private final LlmConfig config;
+    private final ProgressReporter progressReporter;
     private final Gson gson = new Gson();
 
     public OpenAiLlmEnhancer(LlmConfig config) {
+        this(config, null);
+    }
+
+    public OpenAiLlmEnhancer(LlmConfig config, ProgressReporter progressReporter) {
         this.config = config;
+        this.progressReporter = progressReporter;
         this.client = new OpenAiClient(config);
     }
 
@@ -33,8 +40,12 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         );
 
         try {
-            String response = client.chat(messages);
-            return parseBusinessSemantic(response);
+            delayBeforeLlmRequest();
+            OpenAiClient.ChatResult result = client.chat(messages);
+            if (progressReporter != null && (result.promptTokens > 0 || result.completionTokens > 0)) {
+                progressReporter.addTokens(result.promptTokens, result.completionTokens);
+            }
+            return parseBusinessSemantic(result.content);
         } catch (Exception e) {
             // Log and return null on failure - fallback to rule-only output
             return null;
@@ -52,8 +63,12 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         );
 
         try {
-            String response = client.chat(messages);
-            parseAndApplyErrorCodeEnhancement(response, errorCode);
+            delayBeforeLlmRequest();
+            OpenAiClient.ChatResult result = client.chat(messages);
+            if (progressReporter != null && (result.promptTokens > 0 || result.completionTokens > 0)) {
+                progressReporter.addTokens(result.promptTokens, result.completionTokens);
+            }
+            parseAndApplyErrorCodeEnhancement(result.content, errorCode);
         } catch (Exception e) {
             // Log and skip enhancement on failure
         }
@@ -173,5 +188,17 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
     private String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    private void delayBeforeLlmRequest() {
+        int ms = config.getLlmDelayMs();
+        if (ms > 0) {
+            try {
+                Thread.sleep(ms);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting before LLM request", e);
+            }
+        }
     }
 }

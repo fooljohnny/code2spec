@@ -88,6 +88,9 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | `--llm-api-base` | API 基础 URL | `https://api.openai.com/v1` |
 | `--llm-model` | 模型名称 | `gpt-4o-mini` |
 | `--no-llm` | 禁用 LLM 增强 | - |
+| `--proxy` | HTTP 代理（host:port 或 http://host:port） | - |
+| `--llm-delay-ms` | 每次 LLM 请求前等待毫秒数，避免 429 限流 | 2000 |
+| `--llm-retry-wait-ms` | 遇到 429 限流时等待毫秒数后重试 | 60000 |
 
 ## 支持的输入
 

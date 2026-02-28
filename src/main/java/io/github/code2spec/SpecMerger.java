@@ -53,6 +53,12 @@ public class SpecMerger {
         if (fromOpenApi.getResponseType() != null) {
             target.setResponseType(fromOpenApi.getResponseType());
         }
+        if (fromOpenApi.getRequestBodySchema() != null) {
+            target.setRequestBodySchema(fromOpenApi.getRequestBodySchema());
+        }
+        if (fromOpenApi.getResponseBodySchema() != null) {
+            target.setResponseBodySchema(fromOpenApi.getResponseBodySchema());
+        }
     }
 
     private List<ErrorCode> mergeErrorCodes(List<ErrorCode> java, List<ErrorCode> openApi) {
