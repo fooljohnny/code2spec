@@ -9,11 +9,12 @@ import io.github.code2spec.llm.LlmEnhancer;
 import io.github.code2spec.llm.NoOpLlmEnhancer;
 import io.github.code2spec.llm.OpenAiLlmEnhancer;
 import io.github.code2spec.parser.JavaRestParser;
+import io.github.code2spec.parser.OpenApiFileParser;
 
 import java.nio.file.Path;
 
 /**
- * Main pipeline: parse → enhance → export.
+ * Main pipeline: parse Java + OpenAPI → merge → enhance → export.
  */
 public class Pipeline {
     private final Path sourceRoot;
@@ -28,8 +29,13 @@ public class Pipeline {
 
     public void run() throws Exception {
         LlmEnhancer enhancer = createEnhancer();
-        JavaRestParser parser = new JavaRestParser(enhancer);
-        SpecResult result = parser.parse(sourceRoot);
+        JavaRestParser javaParser = new JavaRestParser(enhancer);
+        OpenApiFileParser openApiParser = new OpenApiFileParser();
+
+        SpecResult javaResult = javaParser.parse(sourceRoot);
+        SpecResult openApiResult = openApiParser.parse(sourceRoot);
+
+        SpecResult result = new SpecMerger().merge(javaResult, openApiResult);
 
         outputDir.toFile().mkdirs();
 
