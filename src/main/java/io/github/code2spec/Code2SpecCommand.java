@@ -40,6 +40,9 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"--llm-retry-wait-ms"}, description = "遇到 429 限流时等待毫秒数后重试", defaultValue = "60000")
     private int llmRetryWaitMs = 60000;
 
+    @CommandLine.Option(names = {"--llm-call-chain-depth"}, description = "调用链递归收集深度（接口方法->被调方法->...，0=仅接口方法）", defaultValue = "3")
+    private int llmCallChainDepth = 3;
+
     @Override
     public void run() {
         LlmConfig llmConfig = new LlmConfig();
@@ -47,6 +50,7 @@ public class Code2SpecCommand implements Runnable {
         llmConfig.setProxy(proxy);
         llmConfig.setLlmDelayMs(llmDelayMs);
         llmConfig.setLlmRetryWaitMs(llmRetryWaitMs);
+        llmConfig.setCallChainDepth(llmCallChainDepth);
         if (!noLlm && llmApiKey != null && !llmApiKey.isBlank()) {
             llmConfig.setApiKey(llmApiKey);
             llmConfig.setApiBaseUrl(llmApiBase);

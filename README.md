@@ -9,7 +9,8 @@ Code2Spec 将 Java 代码仓库转换为结构化的 REST API 说明文档，支
 - **OpenAPI 文件**：解析 `openapi.yaml`、`swagger.yaml` 等标准定义，补充描述、约束、示例
 - **LLM 增强**（可选）：
   - **业务语义描述**：功能概述、业务场景、实现要点、注意事项
-  - **完整调用链分析**：收集接口方法及其调用的 B、C 等方法的实现代码，一并发给 LLM 分析
+  - **完整调用链分析**：收集接口方法及其调用的 B、C 等方法的实现代码，一并发给 LLM 分析（可通过 `--llm-call-chain-depth` 配置深度）
+- **异步调用**：支持 Lambda 内的方法调用（如 `CompletableFuture.supplyAsync(() -> service.create())`）
   - **错误码增强**：根因描述、处理建议、预防建议
 - **多格式输出**：OpenAPI 3.x、Markdown、RAG 知识对象（JSON）
 
@@ -92,6 +93,7 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | `--proxy` | HTTP 代理（host:port 或 http://host:port） | - |
 | `--llm-delay-ms` | 每次 LLM 请求前等待毫秒数，避免 429 限流 | 2000 |
 | `--llm-retry-wait-ms` | 遇到 429 限流时等待毫秒数后重试 | 60000 |
+| `--llm-call-chain-depth` | 调用链递归收集深度（0=仅接口方法） | 3 |
 
 ## 支持的输入
 
@@ -117,6 +119,12 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 - **规范版本**：OpenAPI 3.x、Swagger 2.0（自动转换）
 
 指定项目根目录时，会递归扫描其中的 Java 与 YAML/JSON 文件并合并结果，OpenAPI 中的描述、参数、Schema 会补充或覆盖 Java 提取的内容。
+
+### 调用链分析说明
+
+- **项目内类**：`@Autowired`/`@Inject` 注入的 Service、Repository 等，只要其源码在项目目录内，可完整解析调用链
+- **Spring Boot 自动配置类**：来自依赖 JAR（如 `spring-boot-autoconfigure`）的类，源码不在项目中，**无法**解析其内部实现
+- **异步调用**：支持 Lambda 内调用（如 `CompletableFuture.supplyAsync(() -> orderService.create(req))`），会收集 Lambda 体内的 `orderService.create` 调用
 
 ## License
 

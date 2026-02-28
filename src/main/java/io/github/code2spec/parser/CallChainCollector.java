@@ -13,15 +13,29 @@ import java.util.stream.Collectors;
 /**
  * Collects the full call chain (A -> B -> C) for an endpoint method.
  * Uses a method index to resolve callees within project source.
+ *
+ * <p>Supported: project source classes (Service, Repository with @Autowired),
+ * method calls inside lambdas (e.g. CompletableFuture.supplyAsync(() -> service.create())).
+ *
+ * <p>Not supported: classes from JARs (Spring Boot auto-configured beans, library classes)
+ * - their source is not in the project, so we cannot trace into them.
  */
 public class CallChainCollector {
 
-    private static final int MAX_DEPTH = 3;
     private static final int MAX_TOTAL_CHARS = 8000;
     private static final Set<String> SKIP_PACKAGES = Set.of("java.", "javax.", "jakarta.", "org.springframework.", "org.junit.");
 
+    private final int maxDepth;
     private final Map<String, List<MethodDecl>> methodIndex = new HashMap<>();
     private final Map<String, ClassContext> classIndex = new HashMap<>();
+
+    public CallChainCollector() {
+        this(3);
+    }
+
+    public CallChainCollector(int maxDepth) {
+        this.maxDepth = Math.max(0, maxDepth);
+    }
 
     /**
      * Index all methods from parsed compilation units.
@@ -72,7 +86,7 @@ public class CallChainCollector {
     }
 
     private void appendMethod(StringBuilder out, String label, MethodDeclaration m, int depth, Set<String> visited, int[] totalChars) {
-        if (depth > MAX_DEPTH || totalChars[0] > MAX_TOTAL_CHARS) return;
+        if (depth > maxDepth || totalChars[0] > MAX_TOTAL_CHARS) return;
 
         String body = m.getBody().map(b -> b.toString()).orElse("{}");
         String sig = m.getDeclarationAsString(false, false, false);
@@ -80,7 +94,7 @@ public class CallChainCollector {
         out.append(entry);
         totalChars[0] += entry.length();
 
-        if (depth >= MAX_DEPTH) return;
+        if (depth >= maxDepth) return;
 
         List<MethodCallInfo> calls = extractMethodCalls(m, m.findAncestor(ClassOrInterfaceDeclaration.class).orElse(null), m.findAncestor(CompilationUnit.class).orElse(null));
         for (MethodCallInfo call : calls) {
@@ -102,17 +116,27 @@ public class CallChainCollector {
         m.getBody().ifPresent(body -> body.accept(new VoidVisitorAdapter<Void>() {
             @Override
             public void visit(MethodCallExpr n, Void arg) {
-                Expression scope = n.getScope().orElse(null);
-                if (scope == null) scope = new NameExpr("this");
-                String scopeType = resolveScopeType(scope, containingClass, m, cu);
-                if (scopeType != null && !shouldSkip(scopeType)) {
-                    calls.add(new MethodCallInfo(n.getNameAsString(), n.getArguments().size(), scopeType));
-                }
+                collectCallFromExpr(n, containingClass, m, cu, calls);
+                super.visit(n, arg);
+            }
+
+            @Override
+            public void visit(com.github.javaparser.ast.expr.LambdaExpr n, Void arg) {
+                n.getBody().accept(this, arg);
                 super.visit(n, arg);
             }
         }, null));
 
         return calls.stream().collect(Collectors.toMap(c -> c.resolvedClassName + "#" + c.methodName, c -> c, (a, b) -> a)).values().stream().toList();
+    }
+
+    private void collectCallFromExpr(MethodCallExpr n, ClassOrInterfaceDeclaration containingClass, MethodDeclaration method, CompilationUnit cu, List<MethodCallInfo> calls) {
+        Expression scope = n.getScope().orElse(null);
+        if (scope == null) scope = new NameExpr("this");
+        String scopeType = resolveScopeType(scope, containingClass, method, cu);
+        if (scopeType != null && !shouldSkip(scopeType)) {
+            calls.add(new MethodCallInfo(n.getNameAsString(), n.getArguments().size(), scopeType));
+        }
     }
 
     private String resolveScopeType(Expression scope, ClassOrInterfaceDeclaration containingClass, MethodDeclaration method, CompilationUnit cu) {

@@ -30,7 +30,8 @@ public class Pipeline {
     public void run() throws Exception {
         ProgressReporter progress = new ProgressReporter();
         LlmEnhancer enhancer = createEnhancer(progress);
-        JavaRestParser javaParser = new JavaRestParser(enhancer, progress);
+        int callChainDepth = llmConfig != null ? llmConfig.getCallChainDepth() : 3;
+        JavaRestParser javaParser = new JavaRestParser(enhancer, progress, callChainDepth);
         OpenApiFileParser openApiParser = new OpenApiFileParser(progress);
 
         SpecResult javaResult = javaParser.parse(sourceRoot);
