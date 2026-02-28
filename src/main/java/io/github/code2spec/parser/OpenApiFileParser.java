@@ -36,6 +36,13 @@ public class OpenApiFileParser {
             "swagger.yaml", "swagger.yml", "swagger.json"
     );
 
+    /** Filename substrings (lowercase) that indicate OpenAPI/Swagger spec files */
+    private static final List<String> OPENAPI_NAME_PATTERNS = List.of(
+            "openapi", "swagger",
+            "rest-services", "rest_services",
+            "api-spec", "api_spec"
+    );
+
     public SpecResult parse(Path sourceRoot) throws Exception {
         SpecResult result = new SpecResult();
         List<Path> openApiFiles = collectOpenApiFiles(sourceRoot);
@@ -71,9 +78,9 @@ public class OpenApiFileParser {
             stream.filter(p -> p.toFile().isFile())
                     .filter(p -> {
                         String name = p.getFileName().toString().toLowerCase();
-                        return OPENAPI_FILE_NAMES.contains(name)
-                                || ((name.endsWith(".yaml") || name.endsWith(".yml") || name.endsWith(".json"))
-                                && (name.contains("openapi") || name.contains("swagger")));
+                        if (OPENAPI_FILE_NAMES.contains(name)) return true;
+                        if (!name.endsWith(".yaml") && !name.endsWith(".yml") && !name.endsWith(".json")) return false;
+                        return OPENAPI_NAME_PATTERNS.stream().anyMatch(name::contains);
                     })
                     .forEach(files::add);
         }
