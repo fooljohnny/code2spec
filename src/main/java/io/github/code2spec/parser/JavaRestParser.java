@@ -326,10 +326,15 @@ public class JavaRestParser {
             @Override
             public void visit(MethodDeclaration m, Void arg) {
                 m.getAnnotationByName("ExceptionHandler").ifPresent(ann -> {
-                    ErrorCode ec = extractErrorCodeFromHandler(m, ann);
-                    if (ec != null && result.getErrorCodes().stream().noneMatch(e -> e.getCode().equals(ec.getCode()))) {
-                        errorHandlerSnippets.put(ec.getCode(), m.getBody().map(b -> b.toString()).orElse(""));
-                        result.getErrorCodes().add(ec);
+                    List<String> exceptionTypes = extractExceptionTypesFromHandler(ann);
+                    String handlerSnippet = m.getBody().map(b -> b.toString()).orElse("");
+                    for (String exceptionType : exceptionTypes) {
+                        if (isValidExceptionType(exceptionType)
+                                && result.getErrorCodes().stream().noneMatch(e -> e.getCode().equals(exceptionType))) {
+                            ErrorCode ec = buildErrorCode(m, exceptionType);
+                            errorHandlerSnippets.put(exceptionType, handlerSnippet);
+                            result.getErrorCodes().add(ec);
+                        }
                     }
                 });
                 super.visit(m, arg);
@@ -337,24 +342,62 @@ public class JavaRestParser {
         }, null);
     }
 
-    private ErrorCode extractErrorCodeFromHandler(MethodDeclaration m, AnnotationExpr ann) {
-        String exceptionType = "";
+    private List<String> extractExceptionTypesFromHandler(AnnotationExpr ann) {
+        List<String> types = new ArrayList<>();
+        Expression valueExpr = null;
         if (ann instanceof NormalAnnotationExpr n) {
-            exceptionType = n.getPairs().stream()
+            valueExpr = n.getPairs().stream()
                     .filter(p -> p.getNameAsString().equals("value"))
                     .findFirst()
-                    .map(p -> p.getValue().toString())
-                    .orElse("");
+                    .map(p -> p.getValue())
+                    .orElse(null);
+        } else if (ann instanceof SingleMemberAnnotationExpr s) {
+            valueExpr = s.getMemberValue();
         }
-        if (exceptionType.isEmpty() && ann instanceof SingleMemberAnnotationExpr s) {
-            exceptionType = s.getMemberValue().toString();
+        if (valueExpr != null) {
+            collectExceptionTypes(valueExpr, types);
         }
-        if (exceptionType.endsWith(".class")) {
-            exceptionType = exceptionType.substring(0, exceptionType.length() - 6);
-        } else if (exceptionType.contains(".")) {
-            exceptionType = exceptionType.substring(exceptionType.lastIndexOf('.') + 1);
-        }
+        return types;
+    }
 
+    private void collectExceptionTypes(Expression exp, List<String> types) {
+        if (exp instanceof ArrayInitializerExpr arr) {
+            for (Expression e : arr.getValues()) {
+                collectExceptionTypes(e, types);
+            }
+        } else {
+            String name = extractTypeNameFromClassExpr(exp);
+            if (name != null && !name.isBlank()) types.add(name);
+        }
+    }
+
+    private String extractTypeNameFromClassExpr(Expression exp) {
+        if (exp instanceof FieldAccessExpr fa && "class".equals(fa.getNameAsString())) {
+            Expression scope = fa.getScope();
+            if (scope instanceof com.github.javaparser.ast.expr.NameExpr ne) {
+                return ne.getNameAsString();
+            }
+            if (scope instanceof FieldAccessExpr) {
+                return scope.toString();
+            }
+            return scope.toString().replace(".class", "").replaceAll(".*\\.", "");
+        }
+        if (exp instanceof com.github.javaparser.ast.expr.NameExpr ne) {
+            return ne.getNameAsString();
+        }
+        String s = exp.toString();
+        if (s.endsWith(".class")) return s.substring(0, s.length() - 6).replaceAll(".*\\.", "");
+        if (s.matches(".*[A-Za-z][A-Za-z0-9_]*")) return s.replaceAll(".*\\.([A-Za-z][A-Za-z0-9_]*)", "$1");
+        return null;
+    }
+
+    private boolean isValidExceptionType(String s) {
+        if (s == null || s.isBlank()) return false;
+        if (s.contains("}") || s.contains("{") || "class".equals(s)) return false;
+        return s.matches("[A-Za-z][A-Za-z0-9_]*");
+    }
+
+    private ErrorCode buildErrorCode(MethodDeclaration m, String exceptionType) {
         ErrorCode ec = new ErrorCode();
         ec.setCode(exceptionType);
         ec.setExceptionType(exceptionType);
