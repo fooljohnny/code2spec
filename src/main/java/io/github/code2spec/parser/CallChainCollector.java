@@ -22,19 +22,26 @@ import java.util.stream.Collectors;
  */
 public class CallChainCollector {
 
-    private static final int MAX_TOTAL_CHARS = 8000;
     private static final Set<String> SKIP_PACKAGES = Set.of("java.", "javax.", "jakarta.", "org.springframework.", "org.junit.");
+    private static final Set<String> RELEVANT_ANNOTATIONS = Set.of("Transactional", "Cacheable", "Async", "CacheEvict", "Scheduled");
 
     private final int maxDepth;
+    private final int maxTotalChars;
     private final Map<String, List<MethodDecl>> methodIndex = new HashMap<>();
     private final Map<String, ClassContext> classIndex = new HashMap<>();
+    private final Map<String, List<String>> interfaceImplementations = new HashMap<>();
 
     public CallChainCollector() {
-        this(3);
+        this(3, 12000);
     }
 
     public CallChainCollector(int maxDepth) {
+        this(maxDepth, 12000);
+    }
+
+    public CallChainCollector(int maxDepth, int maxTotalChars) {
         this.maxDepth = Math.max(0, maxDepth);
+        this.maxTotalChars = Math.max(1000, maxTotalChars);
     }
 
     /**
@@ -56,6 +63,14 @@ public class CallChainCollector {
                 classIndex.put(className, new ClassContext(c, unit));
                 for (MethodDeclaration m : c.getMethods()) {
                     methodIndex.computeIfAbsent(key(className, m.getNameAsString()), k -> new ArrayList<>()).add(new MethodDecl(className, m));
+                }
+                for (var ext : c.getExtendedTypes()) {
+                    String superName = toQualifiedName(ext.getNameAsString(), unit);
+                    interfaceImplementations.computeIfAbsent(superName, k -> new ArrayList<>()).add(className);
+                }
+                for (var impl : c.getImplementedTypes()) {
+                    String ifaceName = toQualifiedName(impl.getNameAsString(), unit);
+                    interfaceImplementations.computeIfAbsent(ifaceName, k -> new ArrayList<>()).add(className);
                 }
                 super.visit(c, arg);
             }
@@ -86,11 +101,25 @@ public class CallChainCollector {
     }
 
     private void appendMethod(StringBuilder out, String label, MethodDeclaration m, int depth, Set<String> visited, int[] totalChars) {
-        if (depth > maxDepth || totalChars[0] > MAX_TOTAL_CHARS) return;
+        if (depth > maxDepth || totalChars[0] > maxTotalChars) return;
 
-        String body = m.getBody().map(b -> b.toString()).orElse("{}");
+        StringBuilder entry = new StringBuilder();
+        entry.append(label).append(":\n");
+        String javadoc = m.getJavadoc().map(j -> j.getDescription().toText().trim()).orElse(null);
+        if (javadoc != null && !javadoc.isBlank()) {
+            String jd = javadoc.replace("\n", " ");
+            entry.append("  /** ").append(jd.substring(0, Math.min(jd.length(), 300))).append(jd.length() > 300 ? "..." : "").append(" */\n");
+        }
+        var anns = m.getAnnotations().stream()
+                .filter(a -> RELEVANT_ANNOTATIONS.contains(a.getNameAsString()))
+                .map(a -> "@" + a.getNameAsString())
+                .toList();
+        if (!anns.isEmpty()) {
+            entry.append("  ").append(String.join(" ", anns)).append("\n");
+        }
         String sig = m.getDeclarationAsString(false, false, false);
-        String entry = label + ":\n" + sig + " {\n" + body + "\n}\n\n";
+        String body = m.getBody().map(b -> b.toString()).orElse("{}");
+        entry.append("  ").append(sig).append(" {\n").append(body).append("\n  }\n\n");
         out.append(entry);
         totalChars[0] += entry.length();
 
@@ -102,11 +131,19 @@ public class CallChainCollector {
             if (callee != null) {
                 String visitKey = callee.getRange().map(r -> r.begin.toString()).orElse("") + callee.getNameAsString();
                 if (visited.add(visitKey)) {
-                    String calleeClass = call.resolvedClassName;
-                    appendMethod(out, "  -> " + calleeClass + "." + callee.getNameAsString(), callee, depth + 1, visited, totalChars);
+                    String callLabel = "  -> " + call.resolvedClassName + "." + callee.getNameAsString();
+                    if (call.condition != null && !call.condition.isBlank()) {
+                        callLabel += " (条件: " + truncateStr(call.condition, 80) + ")";
+                    }
+                    appendMethod(out, callLabel, callee, depth + 1, visited, totalChars);
                 }
             }
         }
+    }
+
+    private static String truncateStr(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "...";
     }
 
     private List<MethodCallInfo> extractMethodCalls(MethodDeclaration m, ClassOrInterfaceDeclaration containingClass, CompilationUnit cu) {
@@ -125,6 +162,12 @@ public class CallChainCollector {
                 n.getBody().accept(this, arg);
                 super.visit(n, arg);
             }
+
+            @Override
+            public void visit(MethodReferenceExpr n, Void arg) {
+                collectCallFromMethodRef(n, containingClass, m, cu, calls);
+                super.visit(n, arg);
+            }
         }, null));
 
         return calls.stream().collect(Collectors.toMap(c -> c.resolvedClassName + "#" + c.methodName, c -> c, (a, b) -> a)).values().stream().toList();
@@ -135,8 +178,61 @@ public class CallChainCollector {
         if (scope == null) scope = new NameExpr("this");
         String scopeType = resolveScopeType(scope, containingClass, method, cu);
         if (scopeType != null && !shouldSkip(scopeType)) {
-            calls.add(new MethodCallInfo(n.getNameAsString(), n.getArguments().size(), scopeType));
+            String condition = findEnclosingCondition(n);
+            calls.add(new MethodCallInfo(n.getNameAsString(), n.getArguments().size(), scopeType, condition));
         }
+    }
+
+    private void collectCallFromMethodRef(MethodReferenceExpr n, ClassOrInterfaceDeclaration containingClass, MethodDeclaration method, CompilationUnit cu, List<MethodCallInfo> calls) {
+        Expression scope = n.getScope();
+        String methodName = n.getIdentifier();
+        if ("new".equals(methodName)) return;
+        String scopeType = resolveScopeTypeForMethodRef(scope, containingClass, method, cu);
+        if (scopeType != null && !shouldSkip(scopeType)) {
+            calls.add(new MethodCallInfo(methodName, -1, scopeType, null));
+        }
+    }
+
+    private String resolveScopeTypeForMethodRef(Expression scope, ClassOrInterfaceDeclaration containingClass, MethodDeclaration method, CompilationUnit cu) {
+        if (scope instanceof com.github.javaparser.ast.expr.ThisExpr) {
+            return getClassName(containingClass, cu);
+        }
+        if (scope instanceof NameExpr ne) {
+            String name = ne.getNameAsString();
+            String fieldType = findFieldType(containingClass, name, cu);
+            if (fieldType != null) return fieldType;
+            String paramType = method.getParameterByName(name).map(p -> p.getType().asString()).orElse(null);
+            if (paramType != null) return toQualifiedName(paramType, cu);
+            return resolveClassByName(name, cu);
+        }
+        if (scope instanceof FieldAccessExpr fa) {
+            Expression scopeExpr = fa.getScope();
+            String scopeType = resolveScopeTypeForMethodRef(scopeExpr, containingClass, method, cu);
+            if (scopeType != null) {
+                String fieldType = findFieldTypeInClass(scopeType, fa.getNameAsString());
+                return fieldType != null ? fieldType : scopeType;
+            }
+        }
+        return null;
+    }
+
+    private String resolveClassByName(String simpleName, CompilationUnit cu) {
+        String pkg = cu.getPackageDeclaration().map(pd -> pd.getNameAsString()).orElse("");
+        String fullName = pkg.isEmpty() ? simpleName : pkg + "." + simpleName;
+        if (classIndex.containsKey(fullName)) return fullName;
+        return classIndex.keySet().stream()
+                .filter(k -> k.endsWith("." + simpleName) || k.equals(simpleName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String findEnclosingCondition(MethodCallExpr n) {
+        return n.findAncestor(com.github.javaparser.ast.stmt.IfStmt.class)
+                .map(ifStmt -> ifStmt.getCondition().toString())
+                .orElse(n.findAncestor(com.github.javaparser.ast.stmt.ForStmt.class)
+                        .flatMap(f -> f.getCompare())
+                        .map(c -> c.toString())
+                        .orElse(null));
     }
 
     private String resolveScopeType(Expression scope, ClassOrInterfaceDeclaration containingClass, MethodDeclaration method, CompilationUnit cu) {
@@ -149,7 +245,7 @@ public class CallChainCollector {
             if (fieldType != null) return fieldType;
             String paramType = method.getParameterByName(name).map(p -> p.getType().asString()).orElse(null);
             if (paramType != null) return toQualifiedName(paramType, cu);
-            return null;
+            return resolveClassByName(name, cu);
         }
         if (scope instanceof FieldAccessExpr fa) {
             Expression scopeExpr = fa.getScope();
@@ -208,6 +304,16 @@ public class CallChainCollector {
     private MethodDeclaration resolveCallee(MethodCallInfo call) {
         List<MethodDecl> candidates = methodIndex.get(key(call.resolvedClassName, call.methodName));
         if (candidates == null) {
+            List<String> typesToTry = new ArrayList<>();
+            typesToTry.add(call.resolvedClassName);
+            List<String> impls = interfaceImplementations.get(call.resolvedClassName);
+            if (impls != null) typesToTry.addAll(impls);
+            for (String type : typesToTry) {
+                candidates = methodIndex.get(key(type, call.methodName));
+                if (candidates != null && !candidates.isEmpty()) break;
+            }
+        }
+        if (candidates == null || candidates.isEmpty()) {
             int dot = call.resolvedClassName.lastIndexOf('.');
             if (dot > 0) {
                 String simple = call.resolvedClassName.substring(dot + 1);
@@ -219,11 +325,14 @@ public class CallChainCollector {
             }
         }
         if (candidates == null || candidates.isEmpty()) return null;
-        return candidates.stream()
-                .filter(md -> md.m.getParameters().size() == call.argCount)
-                .findFirst()
-                .map(md -> md.m)
-                .orElse(candidates.get(0).m);
+        if (call.argCount >= 0) {
+            return candidates.stream()
+                    .filter(md -> md.m.getParameters().size() == call.argCount)
+                    .findFirst()
+                    .map(md -> md.m)
+                    .orElse(candidates.get(0).m);
+        }
+        return candidates.get(0).m;
     }
 
     private MethodDeclaration findMethod(String className, String methodName, int argCount) {
@@ -236,7 +345,11 @@ public class CallChainCollector {
                 .orElse(candidates.isEmpty() ? null : candidates.get(0).m);
     }
 
-    private record MethodCallInfo(String methodName, int argCount, String resolvedClassName) {}
+    private record MethodCallInfo(String methodName, int argCount, String resolvedClassName, String condition) {
+        MethodCallInfo(String methodName, int argCount, String resolvedClassName) {
+            this(methodName, argCount, resolvedClassName, null);
+        }
+    }
 
     private record MethodDecl(String className, MethodDeclaration m) {}
 

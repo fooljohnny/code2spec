@@ -43,6 +43,12 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"--llm-call-chain-depth"}, description = "调用链递归收集深度（接口方法->被调方法->...，0=仅接口方法）", defaultValue = "3")
     private int llmCallChainDepth = 3;
 
+    @CommandLine.Option(names = {"--llm-method-body-max-chars"}, description = "接口方法体最大字符数", defaultValue = "2000")
+    private int llmMethodBodyMaxChars = 2000;
+
+    @CommandLine.Option(names = {"--llm-call-chain-max-chars"}, description = "调用链总最大字符数", defaultValue = "12000")
+    private int llmCallChainMaxChars = 12000;
+
     @Override
     public void run() {
         LlmConfig llmConfig = new LlmConfig();
@@ -51,6 +57,8 @@ public class Code2SpecCommand implements Runnable {
         llmConfig.setLlmDelayMs(llmDelayMs);
         llmConfig.setLlmRetryWaitMs(llmRetryWaitMs);
         llmConfig.setCallChainDepth(llmCallChainDepth);
+        llmConfig.setMethodBodyMaxChars(llmMethodBodyMaxChars);
+        llmConfig.setCallChainMaxChars(llmCallChainMaxChars);
         if (!noLlm && llmApiKey != null && !llmApiKey.isBlank()) {
             llmConfig.setApiKey(llmApiKey);
             llmConfig.setApiBaseUrl(llmApiBase);

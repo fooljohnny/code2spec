@@ -105,14 +105,16 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         if (ctx.getReturnType() != null) {
             sb.append("- 返回类型: ").append(ctx.getReturnType()).append("\n");
         }
+        int methodBodyMax = config.getMethodBodyMaxChars();
         if (ctx.getMethodBodySnippet() != null && !ctx.getMethodBodySnippet().isBlank()) {
-            sb.append("- 方法体片段:\n```\n").append(truncate(ctx.getMethodBodySnippet(), 1500)).append("\n```\n");
+            sb.append("- 方法体片段:\n```\n").append(truncate(ctx.getMethodBodySnippet(), methodBodyMax)).append("\n```\n");
         }
         if (ctx.getCalledMethodNames() != null && !ctx.getCalledMethodNames().isEmpty()) {
             sb.append("- 调用的方法: ").append(String.join(", ", ctx.getCalledMethodNames())).append("\n");
         }
+        int callChainMax = config.getCallChainMaxChars();
         if (ctx.getCallChainSnippet() != null && !ctx.getCallChainSnippet().isBlank()) {
-            sb.append("- 完整调用链代码:\n```\n").append(truncate(ctx.getCallChainSnippet(), 6000)).append("\n```\n");
+            sb.append("- 完整调用链代码:\n```\n").append(truncate(ctx.getCallChainSnippet(), callChainMax)).append("\n```\n");
         }
         sb.append("\n请生成 JSON 格式的业务语义描述。");
         return sb.toString();

@@ -26,19 +26,25 @@ public class JavaRestParser {
     private final LlmEnhancer llmEnhancer;
     private final ProgressReporter progressReporter;
     private final int callChainDepth;
+    private final int callChainMaxChars;
 
     public JavaRestParser(LlmEnhancer llmEnhancer) {
-        this(llmEnhancer, null, 3);
+        this(llmEnhancer, null, 3, 12000);
     }
 
     public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter) {
-        this(llmEnhancer, progressReporter, 3);
+        this(llmEnhancer, progressReporter, 3, 12000);
     }
 
     public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth) {
+        this(llmEnhancer, progressReporter, callChainDepth, 12000);
+    }
+
+    public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth, int callChainMaxChars) {
         this.llmEnhancer = llmEnhancer;
         this.progressReporter = progressReporter;
         this.callChainDepth = callChainDepth;
+        this.callChainMaxChars = callChainMaxChars;
     }
 
     public SpecResult parse(Path sourceRoot) throws Exception {
@@ -62,7 +68,7 @@ public class JavaRestParser {
             }
         }
 
-        CallChainCollector callChainCollector = new CallChainCollector(callChainDepth);
+        CallChainCollector callChainCollector = new CallChainCollector(callChainDepth, callChainMaxChars);
         callChainCollector.indexCompilationUnits(pathToCu);
 
         int endpointCount = 0;

@@ -31,7 +31,8 @@ public class Pipeline {
         ProgressReporter progress = new ProgressReporter();
         LlmEnhancer enhancer = createEnhancer(progress);
         int callChainDepth = llmConfig != null ? llmConfig.getCallChainDepth() : 3;
-        JavaRestParser javaParser = new JavaRestParser(enhancer, progress, callChainDepth);
+        int callChainMaxChars = llmConfig != null ? llmConfig.getCallChainMaxChars() : 12000;
+        JavaRestParser javaParser = new JavaRestParser(enhancer, progress, callChainDepth, callChainMaxChars);
         OpenApiFileParser openApiParser = new OpenApiFileParser(progress);
 
         SpecResult javaResult = javaParser.parse(sourceRoot);

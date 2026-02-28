@@ -94,6 +94,8 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | `--llm-delay-ms` | 每次 LLM 请求前等待毫秒数，避免 429 限流 | 2000 |
 | `--llm-retry-wait-ms` | 遇到 429 限流时等待毫秒数后重试 | 60000 |
 | `--llm-call-chain-depth` | 调用链递归收集深度（0=仅接口方法） | 3 |
+| `--llm-method-body-max-chars` | 接口方法体最大字符数 | 2000 |
+| `--llm-call-chain-max-chars` | 调用链总最大字符数 | 12000 |
 
 ## 支持的输入
 
