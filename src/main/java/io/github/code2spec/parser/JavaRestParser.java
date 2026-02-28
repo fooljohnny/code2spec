@@ -14,6 +14,7 @@ import io.github.code2spec.llm.LlmEnhancer;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -82,9 +83,11 @@ public class JavaRestParser {
         return c.getAnnotationByName("RestController").isPresent()
                 || c.getAnnotationByName("Controller").isPresent()
                 || c.getAnnotationByName("Path").isPresent()
+                || c.getAnnotationByName("RestSchema").isPresent()
                 || hasAnnotation(c, "RestController")
                 || hasAnnotation(c, "Controller")
-                || hasAnnotation(c, "Path");
+                || hasAnnotation(c, "Path")
+                || hasAnnotation(c, "RestSchema");
     }
 
     private boolean hasAnnotation(ClassOrInterfaceDeclaration c, String name) {
@@ -107,7 +110,7 @@ public class JavaRestParser {
     private String getPathValue(AnnotationExpr ann) {
         if (ann instanceof NormalAnnotationExpr n) {
             return n.getPairs().stream()
-                    .filter(p -> p.getNameAsString().equals("value"))
+                    .filter(p -> p.getNameAsString().equals("value") || p.getNameAsString().equals("path"))
                     .findFirst()
                     .map(p -> extractStringValue(p.getValue()))
                     .orElse("");
@@ -199,6 +202,11 @@ public class JavaRestParser {
         }
     }
 
+    private static final Set<String> SERVLET_TYPES = Set.of(
+            "HttpServletRequest", "HttpServletResponse", "ServletRequest", "ServletResponse",
+            "javax.servlet.http.HttpServletRequest", "javax.servlet.http.HttpServletResponse",
+            "jakarta.servlet.http.HttpServletRequest", "jakarta.servlet.http.HttpServletResponse");
+
     private void extractJaxRsParams(com.github.javaparser.ast.body.Parameter p, Endpoint ep, Parameter param) {
         if (p.getAnnotationByName("PathParam").isPresent()) {
             param.setIn("path");
@@ -218,10 +226,16 @@ public class JavaRestParser {
             param.setName(extractJaxRsParamName(p, "FormParam"));
         } else if (p.getAnnotationByName("BeanParam").isPresent()) {
             // BeanParam typically contains multiple params, skip for now
-        } else {
-            // No JAX-RS param annotation = request body (for @POST, @PUT, etc.)
+        } else if (!isServletOrContextType(p.getType().asString())) {
+            // No JAX-RS param annotation and not Servlet type = request body
             ep.setRequestBodyType(p.getType().asString());
         }
+    }
+
+    private boolean isServletOrContextType(String typeName) {
+        if (typeName == null || typeName.isBlank()) return false;
+        String simple = typeName.contains(".") ? typeName.substring(typeName.lastIndexOf('.') + 1) : typeName;
+        return SERVLET_TYPES.contains(typeName) || SERVLET_TYPES.contains(simple);
     }
 
     private String extractJaxRsParamName(com.github.javaparser.ast.body.Parameter p, String annName) {
@@ -372,6 +386,10 @@ public class JavaRestParser {
     }
 
     private String extractTypeNameFromClassExpr(Expression exp) {
+        if (exp instanceof ClassExpr ce) {
+            String full = ce.getType().asString();
+            return full.contains(".") ? full.substring(full.lastIndexOf('.') + 1) : full;
+        }
         if (exp instanceof FieldAccessExpr fa && "class".equals(fa.getNameAsString())) {
             Expression scope = fa.getScope();
             if (scope instanceof com.github.javaparser.ast.expr.NameExpr ne) {
