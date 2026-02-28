@@ -1,5 +1,6 @@
 package io.github.code2spec.parser;
 
+import io.github.code2spec.ProgressReporter;
 import io.github.code2spec.core.model.*;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
@@ -20,6 +21,16 @@ import java.util.stream.Collectors;
  */
 public class OpenApiFileParser {
 
+    private final ProgressReporter progressReporter;
+
+    public OpenApiFileParser() {
+        this(null);
+    }
+
+    public OpenApiFileParser(ProgressReporter progressReporter) {
+        this.progressReporter = progressReporter;
+    }
+
     private static final List<String> OPENAPI_FILE_NAMES = List.of(
             "openapi.yaml", "openapi.yml", "openapi.json",
             "swagger.yaml", "swagger.yml", "swagger.json"
@@ -29,7 +40,15 @@ public class OpenApiFileParser {
         SpecResult result = new SpecResult();
         List<Path> openApiFiles = collectOpenApiFiles(sourceRoot);
 
-        for (Path file : openApiFiles) {
+        if (progressReporter != null) {
+            progressReporter.onParseOpenApiStart(openApiFiles.size());
+        }
+
+        for (int i = 0; i < openApiFiles.size(); i++) {
+            Path file = openApiFiles.get(i);
+            if (progressReporter != null) {
+                progressReporter.onParseOpenApiFile(i + 1, openApiFiles.size(), file.toString());
+            }
             try {
                 String content = Files.readString(file);
                 SwaggerParseResult parseResult = new OpenAPIV3Parser().readContents(content, null, null);

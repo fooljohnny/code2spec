@@ -61,7 +61,7 @@ public class OpenAiClient {
         return new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
     }
 
-    public String chat(List<ChatMessage> messages) throws IOException {
+    public ChatResult chat(List<ChatMessage> messages) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
         body.addProperty("max_tokens", maxTokens);
@@ -87,10 +87,17 @@ public class OpenAiClient {
                 }
                 String responseBody = response.body().string();
                 JsonObject json = JsonParser.parseString(responseBody).getAsJsonObject();
-                return json.getAsJsonArray("choices")
+                String content = json.getAsJsonArray("choices")
                         .get(0).getAsJsonObject()
                         .getAsJsonObject("message")
                         .get("content").getAsString();
+                int prompt = 0, completion = 0;
+                if (json.has("usage")) {
+                    JsonObject usage = json.getAsJsonObject("usage");
+                    if (usage.has("prompt_tokens")) prompt = usage.get("prompt_tokens").getAsInt();
+                    if (usage.has("completion_tokens")) completion = usage.get("completion_tokens").getAsInt();
+                }
+                return new ChatResult(content, prompt, completion);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted while waiting for retry", e);
@@ -106,6 +113,18 @@ public class OpenAiClient {
         public ChatMessage(String role, String content) {
             this.role = role;
             this.content = content;
+        }
+    }
+
+    public static class ChatResult {
+        public final String content;
+        public final int promptTokens;
+        public final int completionTokens;
+
+        public ChatResult(String content, int promptTokens, int completionTokens) {
+            this.content = content;
+            this.promptTokens = promptTokens;
+            this.completionTokens = completionTokens;
         }
     }
 }

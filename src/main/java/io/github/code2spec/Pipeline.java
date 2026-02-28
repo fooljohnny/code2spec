@@ -28,12 +28,15 @@ public class Pipeline {
     }
 
     public void run() throws Exception {
-        LlmEnhancer enhancer = createEnhancer();
-        JavaRestParser javaParser = new JavaRestParser(enhancer);
-        OpenApiFileParser openApiParser = new OpenApiFileParser();
+        ProgressReporter progress = new ProgressReporter();
+        LlmEnhancer enhancer = createEnhancer(progress);
+        JavaRestParser javaParser = new JavaRestParser(enhancer, progress);
+        OpenApiFileParser openApiParser = new OpenApiFileParser(progress);
 
         SpecResult javaResult = javaParser.parse(sourceRoot);
         SpecResult openApiResult = openApiParser.parse(sourceRoot);
+
+        progress.onMergeAndExport();
 
         SpecResult result = new SpecMerger().merge(javaResult, openApiResult);
 
@@ -47,11 +50,14 @@ public class Pipeline {
         System.out.println("  - " + outputDir.resolve("openapi.json"));
         System.out.println("  - " + outputDir.resolve("api-docs.md"));
         System.out.println("  - " + outputDir.resolve("rag") + "/");
+        System.out.println();
+
+        progress.printSummary();
     }
 
-    private LlmEnhancer createEnhancer() {
+    private LlmEnhancer createEnhancer(ProgressReporter progress) {
         if (llmConfig != null && llmConfig.isEnabled() && llmConfig.getApiKey() != null && !llmConfig.getApiKey().isBlank()) {
-            return new OpenAiLlmEnhancer(llmConfig);
+            return new OpenAiLlmEnhancer(llmConfig, progress);
         }
         return new NoOpLlmEnhancer();
     }

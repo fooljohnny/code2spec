@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
+import io.github.code2spec.ProgressReporter;
 import io.github.code2spec.core.model.*;
 import io.github.code2spec.llm.EndpointContext;
 import io.github.code2spec.llm.ErrorCodeContext;
@@ -22,20 +23,35 @@ import java.util.stream.Collectors;
  */
 public class JavaRestParser {
     private final LlmEnhancer llmEnhancer;
+    private final ProgressReporter progressReporter;
 
     public JavaRestParser(LlmEnhancer llmEnhancer) {
+        this(llmEnhancer, null);
+    }
+
+    public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter) {
         this.llmEnhancer = llmEnhancer;
+        this.progressReporter = progressReporter;
     }
 
     public SpecResult parse(Path sourceRoot) throws Exception {
         SpecResult result = new SpecResult();
         List<Path> javaFiles = collectJavaFiles(sourceRoot);
 
-        for (Path file : javaFiles) {
+        if (progressReporter != null) {
+            progressReporter.onParseJavaStart(javaFiles.size());
+        }
+
+        int endpointCount = 0;
+        for (int i = 0; i < javaFiles.size(); i++) {
+            Path file = javaFiles.get(i);
+            if (progressReporter != null) {
+                progressReporter.onParseJavaFile(i + 1, javaFiles.size(), file.toString());
+            }
             ParseResult<CompilationUnit> parseResult = new JavaParser().parse(file);
             if (parseResult.isSuccessful() && parseResult.getResult().isPresent()) {
                 CompilationUnit cu = parseResult.getResult().get();
-                extractEndpoints(cu, result);
+                endpointCount = extractEndpoints(cu, result, endpointCount);
                 extractErrorHandlers(cu, result);
             }
         }
@@ -56,7 +72,8 @@ public class JavaRestParser {
         return files;
     }
 
-    private void extractEndpoints(CompilationUnit cu, SpecResult result) {
+    private int extractEndpoints(CompilationUnit cu, SpecResult result, int endpointCount) {
+        int[] count = new int[] { endpointCount };
         cu.accept(new VoidVisitorAdapter<Void>() {
             @Override
             public void visit(ClassOrInterfaceDeclaration c, Void arg) {
@@ -68,6 +85,9 @@ public class JavaRestParser {
                     if (ep != null) {
                         EndpointContext ctx = buildEndpointContext(m, ep);
                         if (llmEnhancer != null && llmEnhancer.isEnabled()) {
+                            if (progressReporter != null) {
+                                progressReporter.onLlmEndpointStart(++count[0], 0, ep.getHttpMethod() + " " + ep.getUri());
+                            }
                             BusinessSemantic semantic = llmEnhancer.enhanceEndpoint(ctx);
                             ep.setBusinessSemantic(semantic);
                         }
@@ -77,6 +97,7 @@ public class JavaRestParser {
                 super.visit(c, arg);
             }
         }, null);
+        return count[0];
     }
 
     private boolean isRestResource(ClassOrInterfaceDeclaration c) {
@@ -436,7 +457,10 @@ public class JavaRestParser {
     }
 
     private void enhanceErrorCodes(SpecResult result) {
-        for (ErrorCode ec : result.getErrorCodes()) {
+        var errorCodes = result.getErrorCodes();
+        int total = errorCodes.size();
+        for (int i = 0; i < total; i++) {
+            ErrorCode ec = errorCodes.get(i);
             ErrorCodeContext ctx = new ErrorCodeContext();
             ctx.setCode(ec.getCode());
             ctx.setMessage(ec.getMessage());
@@ -444,6 +468,9 @@ public class JavaRestParser {
             ctx.setExceptionType(ec.getExceptionType());
             ctx.setExceptionHandlerSnippet(errorHandlerSnippets.getOrDefault(ec.getCode(), ""));
             if (llmEnhancer != null && llmEnhancer.isEnabled()) {
+                if (progressReporter != null) {
+                    progressReporter.onLlmErrorCodeStart(i + 1, total, ec.getCode());
+                }
                 llmEnhancer.enhanceErrorCode(ec, ctx);
             }
         }
