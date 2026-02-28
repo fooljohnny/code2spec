@@ -19,6 +19,8 @@ public class Endpoint {
     private List<Parameter> parameters = new ArrayList<>();
     private String requestBodyType;
     private String responseType;
+    private SchemaDefinition requestBodySchema;
+    private SchemaDefinition responseBodySchema;
     private List<ErrorCodeRef> errorCodes = new ArrayList<>();
 
     public String getUri() { return uri; }
@@ -47,6 +49,12 @@ public class Endpoint {
 
     public String getResponseType() { return responseType; }
     public void setResponseType(String responseType) { this.responseType = responseType; }
+
+    public SchemaDefinition getRequestBodySchema() { return requestBodySchema; }
+    public void setRequestBodySchema(SchemaDefinition requestBodySchema) { this.requestBodySchema = requestBodySchema; }
+
+    public SchemaDefinition getResponseBodySchema() { return responseBodySchema; }
+    public void setResponseBodySchema(SchemaDefinition responseBodySchema) { this.responseBodySchema = responseBodySchema; }
 
     public List<ErrorCodeRef> getErrorCodes() { return errorCodes; }
     public void setErrorCodes(List<ErrorCodeRef> errorCodes) { this.errorCodes = errorCodes; }

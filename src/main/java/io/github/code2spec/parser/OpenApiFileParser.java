@@ -85,7 +85,7 @@ public class OpenApiFileParser {
             for (String method : List.of("get", "post", "put", "delete", "patch")) {
                 Operation op = getOperation(item, method);
                 if (op != null) {
-                    Endpoint ep = toEndpoint(path, method.toUpperCase(), op);
+                    Endpoint ep = toEndpoint(openApi, path, method.toUpperCase(), op);
                     mergeEndpoint(result, ep);
                 }
             }
@@ -127,7 +127,7 @@ public class OpenApiFileParser {
         };
     }
 
-    private Endpoint toEndpoint(String path, String httpMethod, Operation op) {
+    private Endpoint toEndpoint(OpenAPI openApi, String path, String httpMethod, Operation op) {
         Endpoint ep = new Endpoint();
         ep.setUri(path);
         ep.setHttpMethod(httpMethod);
@@ -142,7 +142,11 @@ public class OpenApiFileParser {
                 param.setIn(p.getIn() != null ? p.getIn() : "query");
                 param.setRequired(Boolean.TRUE.equals(p.getRequired()));
                 param.setDescription(p.getDescription());
-                if (p.getSchema() != null) param.setType(schemaType(p.getSchema()));
+                if (p.getSchema() != null) {
+                    Schema<?> schema = resolveSchema(openApi, p.getSchema());
+                    param.setType(schemaType(schema));
+                    applySchemaConstraints(schema, param);
+                }
                 ep.getParameters().add(param);
             }
         }
@@ -150,7 +154,11 @@ public class OpenApiFileParser {
         if (op.getRequestBody() != null && op.getRequestBody().getContent() != null) {
             var content = op.getRequestBody().getContent().get("application/json");
             if (content != null && content.getSchema() != null) {
-                ep.setRequestBodyType(schemaName(content.getSchema()));
+                Schema<?> rawSchema = content.getSchema();
+                String typeName = schemaName(rawSchema);
+                Schema<?> schema = resolveSchema(openApi, rawSchema);
+                ep.setRequestBodyType(typeName);
+                ep.setRequestBodySchema(extractSchemaDefinition(openApi, typeName, schema));
             }
         }
 
@@ -159,11 +167,67 @@ public class OpenApiFileParser {
             if (success != null && success.getContent() != null) {
                 var content = success.getContent().get("application/json");
                 if (content != null && content.getSchema() != null) {
-                    ep.setResponseType(schemaName(content.getSchema()));
+                    Schema<?> rawSchema = content.getSchema();
+                    String typeName = schemaName(rawSchema);
+                    Schema<?> schema = resolveSchema(openApi, rawSchema);
+                    ep.setResponseType(typeName);
+                    ep.setResponseBodySchema(extractSchemaDefinition(openApi, typeName, schema));
                 }
             }
         }
         return ep;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private Schema resolveSchema(OpenAPI openApi, Schema schema) {
+        String ref = schema.get$ref();
+        if (ref != null && ref.contains("/")) {
+            String name = ref.substring(ref.lastIndexOf('/') + 1);
+            var schemas = openApi.getComponents() != null ? openApi.getComponents().getSchemas() : null;
+            if (schemas != null && schemas.containsKey(name)) {
+                return schemas.get(name);
+            }
+        }
+        return schema;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private void applySchemaConstraints(Schema schema, io.github.code2spec.core.model.Parameter param) {
+        if (schema.getMinimum() != null) param.setMinimum(schema.getMinimum().intValue());
+        if (schema.getMaximum() != null) param.setMaximum(schema.getMaximum().intValue());
+        if (schema.getMinLength() != null) param.setMinLength(schema.getMinLength());
+        if (schema.getMaxLength() != null) param.setMaxLength(schema.getMaxLength());
+        if (schema.getPattern() != null) param.setPattern(schema.getPattern());
+        if (schema.getFormat() != null) param.setFormat(schema.getFormat());
+    }
+
+    @SuppressWarnings("rawtypes")
+    private SchemaDefinition extractSchemaDefinition(OpenAPI openApi, String schemaName, Schema schema) {
+        Schema resolved = resolveSchema(openApi, schema);
+        if (resolved.getProperties() == null || resolved.getProperties().isEmpty()) {
+            return null;
+        }
+        SchemaDefinition def = new SchemaDefinition(schemaName);
+        List<String> required = resolved.getRequired() != null ? resolved.getRequired() : List.of();
+        @SuppressWarnings("unchecked")
+        Map<String, Schema> props = (Map<String, Schema>) (Map<?, ?>) resolved.getProperties();
+        for (Map.Entry<String, Schema> entry : props.entrySet()) {
+            Schema<?> propSchema = resolveSchema(openApi, entry.getValue());
+            SchemaField field = new SchemaField();
+            field.setName(entry.getKey());
+            field.setType(schemaType(propSchema));
+            field.setRequired(required.contains(entry.getKey()));
+            field.setDescription(propSchema.getDescription());
+            if (propSchema.getMinimum() != null) field.setMinimum(propSchema.getMinimum().intValue());
+            if (propSchema.getMaximum() != null) field.setMaximum(propSchema.getMaximum().intValue());
+            if (propSchema.getMinLength() != null) field.setMinLength(propSchema.getMinLength());
+            if (propSchema.getMaxLength() != null) field.setMaxLength(propSchema.getMaxLength());
+            if (propSchema.getPattern() != null) field.setPattern(propSchema.getPattern());
+            if (propSchema.getFormat() != null) field.setFormat(propSchema.getFormat());
+            if (propSchema.getExample() != null) field.setExample(String.valueOf(propSchema.getExample()));
+            def.getFields().add(field);
+        }
+        return def;
     }
 
     private String schemaName(Schema<?> schema) {
@@ -192,6 +256,8 @@ public class OpenApiFileParser {
             if (newEp.getParameters() != null && !newEp.getParameters().isEmpty()) ex.setParameters(newEp.getParameters());
             if (newEp.getRequestBodyType() != null) ex.setRequestBodyType(newEp.getRequestBodyType());
             if (newEp.getResponseType() != null) ex.setResponseType(newEp.getResponseType());
+            if (newEp.getRequestBodySchema() != null) ex.setRequestBodySchema(newEp.getRequestBodySchema());
+            if (newEp.getResponseBodySchema() != null) ex.setResponseBodySchema(newEp.getResponseBodySchema());
         } else {
             result.getEndpoints().add(newEp);
         }
