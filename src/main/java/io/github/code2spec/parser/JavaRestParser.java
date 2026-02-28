@@ -68,8 +68,11 @@ public class JavaRestParser {
             }
         }
 
-        CallChainCollector callChainCollector = new CallChainCollector(callChainDepth, callChainMaxChars);
-        callChainCollector.indexCompilationUnits(pathToCu);
+        CallChainCollector callChainCollector = (callChainMaxChars > 0)
+                ? new CallChainCollector(callChainDepth, callChainMaxChars) : null;
+        if (callChainCollector != null) {
+            callChainCollector.indexCompilationUnits(pathToCu);
+        }
 
         int endpointCount = 0;
         for (CompilationUnit cu : pathToCu.values()) {

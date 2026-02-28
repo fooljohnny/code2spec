@@ -9,7 +9,7 @@ Code2Spec 将 Java 代码仓库转换为结构化的 REST API 说明文档，支
 - **OpenAPI 文件**：解析 `openapi.yaml`、`swagger.yaml` 等标准定义，补充描述、约束、示例
 - **LLM 增强**（可选）：
   - **业务语义描述**：功能概述、业务场景、实现要点、注意事项
-  - **完整调用链分析**：收集接口方法及其调用的 B、C 等方法的实现代码，一并发给 LLM 分析（可通过 `--llm-call-chain-depth` 配置深度）
+  - **完整调用链分析**：收集接口方法及其调用的 B、C 等方法的实现代码，一并发给 LLM 分析（可通过 `--llm-call-chain-depth` 配置深度；`--llm-minimal` 可关闭以减少 token）
 - **异步调用**：支持 Lambda 内的方法调用（如 `CompletableFuture.supplyAsync(() -> service.create())`）
   - **错误码增强**：根因描述、处理建议、预防建议
 - **多格式输出**：OpenAPI 3.x、Markdown、RAG 知识对象（JSON）
@@ -93,9 +93,10 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | `--proxy` | HTTP 代理（host:port 或 http://host:port） | - |
 | `--llm-delay-ms` | 每次 LLM 请求前等待毫秒数，避免 429 限流 | 2000 |
 | `--llm-retry-wait-ms` | 遇到 429 限流时等待毫秒数后重试 | 60000 |
-| `--llm-call-chain-depth` | 调用链递归收集深度（0=仅接口方法） | 3 |
-| `--llm-method-body-max-chars` | 接口方法体最大字符数 | 2000 |
-| `--llm-call-chain-max-chars` | 调用链总最大字符数 | 12000 |
+| `--llm-minimal` | 精简模式：仅传接口方法体（约 800 字），不传调用链，减少 token 与耗时 | - |
+| `--llm-call-chain-depth` | 调用链递归收集深度（0=仅接口方法） | 2 |
+| `--llm-method-body-max-chars` | 接口方法体最大字符数 | 1200 |
+| `--llm-call-chain-max-chars` | 调用链总最大字符数 | 6000 |
 
 ## 支持的输入
 
