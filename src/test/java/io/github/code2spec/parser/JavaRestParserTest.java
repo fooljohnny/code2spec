@@ -11,6 +11,21 @@ import static org.junit.jupiter.api.Assertions.*;
 class JavaRestParserTest {
 
     @Test
+    void parseSpringMvcController() throws Exception {
+        Path demoApiDir = Path.of("samples/demo-api/src/main/java/com/example/api").toAbsolutePath();
+        JavaRestParser parser = new JavaRestParser(new NoOpLlmEnhancer());
+        SpecResult result = parser.parse(demoApiDir);
+
+        assertFalse(result.getEndpoints().isEmpty(), "Should find Spring MVC endpoints");
+        assertTrue(result.getEndpoints().stream().anyMatch(e ->
+                e.getUri().contains("/orders") && "POST".equals(e.getHttpMethod())));
+        assertTrue(result.getEndpoints().stream().anyMatch(e ->
+                e.getUri().contains("/orders") && "GET".equals(e.getHttpMethod())));
+        assertTrue(result.getEndpoints().stream().anyMatch(e ->
+                e.getUri().contains("/orders") && "DELETE".equals(e.getHttpMethod())));
+    }
+
+    @Test
     void parseJaxRsResource() throws Exception {
         Path jaxrsDir = Path.of("samples/demo-api/src/main/java/com/example/api/jaxrs").toAbsolutePath();
         JavaRestParser parser = new JavaRestParser(new NoOpLlmEnhancer());
@@ -22,10 +37,10 @@ class JavaRestParserTest {
     }
 
     @Test
-    void parseTest1StyleServiceCombJaxRs() throws Exception {
-        Path test1Dir = Path.of("samples/demo-api/src/main/java/com/example/api/test1").toAbsolutePath();
+    void parseDemoJaxRsServiceCombStyle() throws Exception {
+        Path demoJaxrsDir = Path.of("samples/demo-jaxrs/src/main/java/com/example/jaxrs").toAbsolutePath();
         JavaRestParser parser = new JavaRestParser(new NoOpLlmEnhancer());
-        SpecResult result = parser.parse(test1Dir);
+        SpecResult result = parser.parse(demoJaxrsDir);
 
         assertTrue(result.getEndpoints().stream().anyMatch(e ->
                 e.getUri().endsWith("/file/download") && "POST".equals(e.getHttpMethod())));

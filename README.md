@@ -68,11 +68,15 @@ java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output 
 
 ## 示例项目
 
-`samples/demo-api/` 包含 Spring MVC 示例及 `openapi.yaml`，可用于测试：
+| 示例 | 说明 |
+|------|------|
+| `samples/demo-api/` | Spring MVC + JAX-RS + OpenAPI YAML |
+| `samples/demo-jaxrs/` | 纯 JAX-RS + ServiceComb 风格 |
 
 ```bash
 # 指定项目根目录（会同时扫描 Java 与 OpenAPI 文件）
 java -jar target/code2spec-jar-with-dependencies.jar samples/demo-api -o ./output --no-llm
+java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./output --no-llm
 ```
 
 ## 配置说明
