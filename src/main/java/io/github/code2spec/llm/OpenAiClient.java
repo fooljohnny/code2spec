@@ -32,10 +32,9 @@ public class OpenAiClient {
         this.maxTokens = config.getMaxTokens();
         this.retryWaitMs = config.getLlmRetryWaitMs();
 
-        int readTimeoutSec = config.getLlmReadTimeoutSeconds() > 0 ? config.getLlmReadTimeoutSeconds() : 120;
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(readTimeoutSec, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS);
         Proxy proxy = parseProxy(config.getProxy());
         if (proxy != null) {

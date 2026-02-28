@@ -32,8 +32,7 @@ public class Pipeline {
         LlmEnhancer enhancer = createEnhancer(progress);
         int callChainDepth = llmConfig != null ? llmConfig.getCallChainDepth() : 3;
         int callChainMaxChars = llmConfig != null ? llmConfig.getCallChainMaxChars() : 12000;
-        int llmConcurrency = llmConfig != null ? llmConfig.getLlmConcurrency() : 3;
-        JavaRestParser javaParser = new JavaRestParser(enhancer, progress, callChainDepth, callChainMaxChars, llmConcurrency);
+        JavaRestParser javaParser = new JavaRestParser(enhancer, progress, callChainDepth, callChainMaxChars);
         OpenApiFileParser openApiParser = new OpenApiFileParser(progress);
 
         SpecResult javaResult = javaParser.parse(sourceRoot);
