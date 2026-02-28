@@ -15,6 +15,7 @@ import io.github.code2spec.llm.LlmEnhancer;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -24,14 +25,26 @@ import java.util.stream.Collectors;
 public class JavaRestParser {
     private final LlmEnhancer llmEnhancer;
     private final ProgressReporter progressReporter;
+    private final int callChainDepth;
+    private final int callChainMaxChars;
 
     public JavaRestParser(LlmEnhancer llmEnhancer) {
-        this(llmEnhancer, null);
+        this(llmEnhancer, null, 3, 12000);
     }
 
     public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter) {
+        this(llmEnhancer, progressReporter, 3, 12000);
+    }
+
+    public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth) {
+        this(llmEnhancer, progressReporter, callChainDepth, 12000);
+    }
+
+    public JavaRestParser(LlmEnhancer llmEnhancer, ProgressReporter progressReporter, int callChainDepth, int callChainMaxChars) {
         this.llmEnhancer = llmEnhancer;
         this.progressReporter = progressReporter;
+        this.callChainDepth = callChainDepth;
+        this.callChainMaxChars = callChainMaxChars;
     }
 
     public SpecResult parse(Path sourceRoot) throws Exception {
@@ -42,21 +55,28 @@ public class JavaRestParser {
             progressReporter.onParseJavaStart(javaFiles.size());
         }
 
-        int endpointCount = 0;
+        Map<Path, CompilationUnit> pathToCu = new LinkedHashMap<>();
+        JavaParser parser = new JavaParser();
         for (int i = 0; i < javaFiles.size(); i++) {
             Path file = javaFiles.get(i);
             if (progressReporter != null) {
                 progressReporter.onParseJavaFile(i + 1, javaFiles.size(), file.toString());
             }
-            ParseResult<CompilationUnit> parseResult = new JavaParser().parse(file);
+            ParseResult<CompilationUnit> parseResult = parser.parse(file);
             if (parseResult.isSuccessful() && parseResult.getResult().isPresent()) {
-                CompilationUnit cu = parseResult.getResult().get();
-                endpointCount = extractEndpoints(cu, result, endpointCount);
-                extractErrorHandlers(cu, result);
+                pathToCu.put(file, parseResult.getResult().get());
             }
         }
 
-        // Resolve error code references and enhance with LLM
+        CallChainCollector callChainCollector = new CallChainCollector(callChainDepth, callChainMaxChars);
+        callChainCollector.indexCompilationUnits(pathToCu);
+
+        int endpointCount = 0;
+        for (CompilationUnit cu : pathToCu.values()) {
+            endpointCount = extractEndpoints(cu, result, endpointCount, callChainCollector);
+            extractErrorHandlers(cu, result);
+        }
+
         enhanceErrorCodes(result);
 
         return result;
@@ -72,7 +92,7 @@ public class JavaRestParser {
         return files;
     }
 
-    private int extractEndpoints(CompilationUnit cu, SpecResult result, int endpointCount) {
+    private int extractEndpoints(CompilationUnit cu, SpecResult result, int endpointCount, CallChainCollector callChainCollector) {
         int[] count = new int[] { endpointCount };
         cu.accept(new VoidVisitorAdapter<Void>() {
             @Override
@@ -83,7 +103,7 @@ public class JavaRestParser {
                     Endpoint ep = extractSpringEndpoint(m, classPath);
                     if (ep == null) ep = extractJaxRsEndpoint(m, classPath);
                     if (ep != null) {
-                        EndpointContext ctx = buildEndpointContext(m, ep);
+                        EndpointContext ctx = buildEndpointContext(m, ep, c, cu, callChainCollector);
                         if (llmEnhancer != null && llmEnhancer.isEnabled()) {
                             if (progressReporter != null) {
                                 progressReporter.onLlmEndpointStart(++count[0], 0, ep.getHttpMethod() + " " + ep.getUri());
@@ -330,6 +350,10 @@ public class JavaRestParser {
     }
 
     private EndpointContext buildEndpointContext(MethodDeclaration m, Endpoint ep) {
+        return buildEndpointContext(m, ep, null, null, null);
+    }
+
+    private EndpointContext buildEndpointContext(MethodDeclaration m, Endpoint ep, ClassOrInterfaceDeclaration containingClass, CompilationUnit cu, CallChainCollector callChainCollector) {
         EndpointContext ctx = new EndpointContext();
         ctx.setUri(ep.getUri());
         ctx.setHttpMethod(ep.getHttpMethod());
@@ -339,6 +363,16 @@ public class JavaRestParser {
         ctx.setReturnType(m.getType().asString());
         ctx.setMethodBodySnippet(m.getBody().map(b -> b.toString()).orElse(""));
         ctx.setCalledMethodNames(extractCalledMethods(m));
+        if (callChainCollector != null && containingClass != null && cu != null) {
+            try {
+                String callChain = callChainCollector.collectCallChain(m, containingClass, cu);
+                if (callChain != null && !callChain.isBlank()) {
+                    ctx.setCallChainSnippet(callChain);
+                }
+            } catch (Exception ignored) {
+                // Fallback to method body only when call chain collection fails
+            }
+        }
         return ctx;
     }
 

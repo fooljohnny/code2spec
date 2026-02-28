@@ -12,6 +12,9 @@ public class LlmConfig {
     private String proxy;
     private int llmDelayMs = 2000;
     private int llmRetryWaitMs = 60000;
+    private int callChainDepth = 3;
+    private int methodBodyMaxChars = 2000;
+    private int callChainMaxChars = 12000;
 
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
@@ -36,4 +39,13 @@ public class LlmConfig {
 
     public int getLlmRetryWaitMs() { return llmRetryWaitMs; }
     public void setLlmRetryWaitMs(int llmRetryWaitMs) { this.llmRetryWaitMs = llmRetryWaitMs; }
+
+    public int getCallChainDepth() { return callChainDepth; }
+    public void setCallChainDepth(int callChainDepth) { this.callChainDepth = callChainDepth; }
+
+    public int getMethodBodyMaxChars() { return methodBodyMaxChars; }
+    public void setMethodBodyMaxChars(int methodBodyMaxChars) { this.methodBodyMaxChars = methodBodyMaxChars; }
+
+    public int getCallChainMaxChars() { return callChainMaxChars; }
+    public void setCallChainMaxChars(int callChainMaxChars) { this.callChainMaxChars = callChainMaxChars; }
 }
