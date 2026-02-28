@@ -14,6 +14,7 @@ public class EndpointContext {
     private String returnType;
     private String methodBodySnippet;
     private List<String> calledMethodNames;
+    private String callChainSnippet;
 
     public String getUri() { return uri; }
     public void setUri(String uri) { this.uri = uri; }
@@ -38,4 +39,7 @@ public class EndpointContext {
 
     public List<String> getCalledMethodNames() { return calledMethodNames; }
     public void setCalledMethodNames(List<String> calledMethodNames) { this.calledMethodNames = calledMethodNames; }
+
+    public String getCallChainSnippet() { return callChainSnippet; }
+    public void setCallChainSnippet(String callChainSnippet) { this.callChainSnippet = callChainSnippet; }
 }

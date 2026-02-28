@@ -111,6 +111,9 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         if (ctx.getCalledMethodNames() != null && !ctx.getCalledMethodNames().isEmpty()) {
             sb.append("- 调用的方法: ").append(String.join(", ", ctx.getCalledMethodNames())).append("\n");
         }
+        if (ctx.getCallChainSnippet() != null && !ctx.getCallChainSnippet().isBlank()) {
+            sb.append("- 完整调用链代码:\n```\n").append(truncate(ctx.getCallChainSnippet(), 6000)).append("\n```\n");
+        }
         sb.append("\n请生成 JSON 格式的业务语义描述。");
         return sb.toString();
     }
