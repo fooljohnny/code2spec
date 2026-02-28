@@ -9,6 +9,9 @@ public class LlmConfig {
     private String model = "gpt-4o-mini";
     private boolean enabled = true;
     private int maxTokens = 1024;
+    private String proxy;
+    private int llmDelayMs = 2000;
+    private int llmRetryWaitMs = 60000;
 
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
@@ -24,4 +27,13 @@ public class LlmConfig {
 
     public int getMaxTokens() { return maxTokens; }
     public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
+
+    public String getProxy() { return proxy; }
+    public void setProxy(String proxy) { this.proxy = proxy; }
+
+    public int getLlmDelayMs() { return llmDelayMs; }
+    public void setLlmDelayMs(int llmDelayMs) { this.llmDelayMs = llmDelayMs; }
+
+    public int getLlmRetryWaitMs() { return llmRetryWaitMs; }
+    public void setLlmRetryWaitMs(int llmRetryWaitMs) { this.llmRetryWaitMs = llmRetryWaitMs; }
 }

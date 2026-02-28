@@ -33,6 +33,7 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         );
 
         try {
+            delayBeforeLlmRequest();
             String response = client.chat(messages);
             return parseBusinessSemantic(response);
         } catch (Exception e) {
@@ -52,6 +53,7 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
         );
 
         try {
+            delayBeforeLlmRequest();
             String response = client.chat(messages);
             parseAndApplyErrorCodeEnhancement(response, errorCode);
         } catch (Exception e) {
@@ -173,5 +175,17 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
     private String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    private void delayBeforeLlmRequest() {
+        int ms = config.getLlmDelayMs();
+        if (ms > 0) {
+            try {
+                Thread.sleep(ms);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting before LLM request", e);
+            }
+        }
     }
 }

@@ -31,10 +31,22 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"--no-llm"}, description = "禁用 LLM 增强，仅使用规则提取")
     private boolean noLlm;
 
+    @CommandLine.Option(names = {"--proxy"}, description = "HTTP 代理，格式: host:port 或 http://host:port（内部网络无法直连时使用代理）")
+    private String proxy;
+
+    @CommandLine.Option(names = {"--llm-delay-ms"}, description = "每次 LLM 请求前等待毫秒数，避免 429 限流（如 Groq 建议 2000）", defaultValue = "2000")
+    private int llmDelayMs = 2000;
+
+    @CommandLine.Option(names = {"--llm-retry-wait-ms"}, description = "遇到 429 限流时等待毫秒数后重试", defaultValue = "60000")
+    private int llmRetryWaitMs = 60000;
+
     @Override
     public void run() {
         LlmConfig llmConfig = new LlmConfig();
         llmConfig.setEnabled(!noLlm);
+        llmConfig.setProxy(proxy);
+        llmConfig.setLlmDelayMs(llmDelayMs);
+        llmConfig.setLlmRetryWaitMs(llmRetryWaitMs);
         if (!noLlm && llmApiKey != null && !llmApiKey.isBlank()) {
             llmConfig.setApiKey(llmApiKey);
             llmConfig.setApiBaseUrl(llmApiBase);
