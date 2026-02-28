@@ -50,8 +50,9 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             OpenAiClient.ChatResult result = client.chat(messages);
             if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", System.currentTimeMillis() - t2);
 
-            if (progressReporter != null && (result.promptTokens > 0 || result.completionTokens > 0)) {
-                progressReporter.addTokens(result.promptTokens, result.completionTokens);
+            if (progressReporter != null) {
+                progressReporter.reportLlmCall("端点", ctx.getHttpMethod() + " " + ctx.getUri(),
+                        result.promptTokens, result.completionTokens);
             }
 
             long t3 = System.currentTimeMillis();
@@ -85,8 +86,9 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             OpenAiClient.ChatResult result = client.chat(messages);
             if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", System.currentTimeMillis() - t2);
 
-            if (progressReporter != null && (result.promptTokens > 0 || result.completionTokens > 0)) {
-                progressReporter.addTokens(result.promptTokens, result.completionTokens);
+            if (progressReporter != null) {
+                progressReporter.reportLlmCall("错误码", errorCode.getCode(),
+                        result.promptTokens, result.completionTokens);
             }
 
             long t3 = System.currentTimeMillis();
