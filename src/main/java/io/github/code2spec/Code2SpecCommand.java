@@ -13,7 +13,7 @@ import java.nio.file.Path;
 )
 public class Code2SpecCommand implements Runnable {
 
-    @CommandLine.Parameters(index = "0", description = "Java 源码根目录")
+    @CommandLine.Parameters(index = "0", description = "项目目录（含 Java 源码和/或 OpenAPI/Swagger YAML 文件）")
     private Path sourceDir;
 
     @CommandLine.Option(names = {"-o", "--output"}, description = "输出目录", defaultValue = "./output")

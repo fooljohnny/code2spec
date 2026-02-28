@@ -4,7 +4,9 @@ Code2Spec 将 Java 代码仓库转换为结构化的 REST API 说明文档，支
 
 ## 功能特性
 
-- **规则提取**：基于 AST 解析，自动提取 REST 端点、请求/响应 Schema、错误码映射
+- **多源解析**：同时支持 Java 源码与 OpenAPI/Swagger YAML/JSON 文件，自动合并
+- **规则提取**：基于 AST 解析 Java，提取 REST 端点、请求/响应 Schema、错误码映射
+- **OpenAPI 文件**：解析 `openapi.yaml`、`swagger.yaml` 等标准定义，补充描述、约束、示例
 - **LLM 增强**（可选）：
   - **业务语义描述**：功能概述、业务场景、实现要点、注意事项
   - **错误码增强**：根因描述、处理建议、预防建议
@@ -21,7 +23,7 @@ mvn package -DskipTests
 ### 运行（仅规则提取，无需 API Key）
 
 ```bash
-java -jar target/code2spec-jar-with-dependencies.jar <Java源码目录> -o ./output --no-llm
+java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output --no-llm
 ```
 
 ### 运行（启用 LLM 增强）
@@ -29,10 +31,10 @@ java -jar target/code2spec-jar-with-dependencies.jar <Java源码目录> -o ./out
 ```bash
 # 方式 1：环境变量
 export OPENAI_API_KEY=sk-xxx
-java -jar target/code2spec-jar-with-dependencies.jar <Java源码目录> -o ./output
+java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output
 
 # 方式 2：命令行参数
-java -jar target/code2spec-jar-with-dependencies.jar <Java源码目录> -o ./output \
+java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output \
   --llm-api-key sk-xxx \
   --llm-api-base https://api.openai.com/v1 \
   --llm-model gpt-4o-mini
@@ -66,10 +68,11 @@ java -jar target/code2spec-jar-with-dependencies.jar <Java源码目录> -o ./out
 
 ## 示例项目
 
-`samples/demo-api/` 包含一个简单的 Spring MVC 风格示例，可用于测试：
+`samples/demo-api/` 包含 Spring MVC 示例及 `openapi.yaml`，可用于测试：
 
 ```bash
-java -jar target/code2spec-jar-with-dependencies.jar samples/demo-api/src/main/java -o ./output --no-llm
+# 指定项目根目录（会同时扫描 Java 与 OpenAPI 文件）
+java -jar target/code2spec-jar-with-dependencies.jar samples/demo-api -o ./output --no-llm
 ```
 
 ## 配置说明
@@ -82,12 +85,22 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-api/src/main/j
 | `--llm-model` | 模型名称 | `gpt-4o-mini` |
 | `--no-llm` | 禁用 LLM 增强 | - |
 
-## 支持的注解
+## 支持的输入
+
+### Java 注解
 
 - **Controller**：`@RestController`、`@Controller`
 - **路径**：`@RequestMapping`、`@GetMapping`、`@PostMapping`、`@PutMapping`、`@DeleteMapping`、`@PatchMapping`
 - **参数**：`@PathVariable`、`@RequestParam`、`@RequestBody`
 - **异常**：`@ExceptionHandler`（在 `@ControllerAdvice` / `@RestControllerAdvice` 中）
+
+### OpenAPI/Swagger 文件
+
+- **标准名称**：`openapi.yaml`、`openapi.yml`、`openapi.json`、`swagger.yaml`、`swagger.json`
+- **命名模式**：`*openapi*.yaml`、`*swagger*.yaml`
+- **规范版本**：OpenAPI 3.x、Swagger 2.0（自动转换）
+
+指定项目根目录时，会递归扫描其中的 Java 与 YAML/JSON 文件并合并结果，OpenAPI 中的描述、参数、Schema 会补充或覆盖 Java 提取的内容。
 
 ## License
 
