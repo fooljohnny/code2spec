@@ -52,7 +52,13 @@
             <artifactId>swagger-parser</artifactId>
             <version>2.1.37</version>
         </dependency>
-        <!-- Explicit swagger-parser-v3 for OpenAPIV3Parser/SwaggerParseResult (ensures inclusion in fat JAR) -->
+        <!-- Explicit swagger-parser-core for SwaggerParseResult (main jar may not include it) -->
+        <dependency>
+            <groupId>io.swagger.parser.v3</groupId>
+            <artifactId>swagger-parser-core</artifactId>
+            <version>2.1.37</version>
+        </dependency>
+        <!-- Explicit swagger-parser-v3 for OpenAPIV3Parser (ensures inclusion in fat JAR) -->
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
             <artifactId>swagger-parser-v3</artifactId>
