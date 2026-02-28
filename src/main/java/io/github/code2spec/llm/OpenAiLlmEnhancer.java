@@ -1,0 +1,177 @@
+package io.github.code2spec.llm;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import io.github.code2spec.core.model.BusinessSemantic;
+import io.github.code2spec.core.model.ErrorCode;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * OpenAI-compatible LLM enhancer for business semantics and error codes.
+ */
+public class OpenAiLlmEnhancer implements LlmEnhancer {
+    private final OpenAiClient client;
+    private final LlmConfig config;
+    private final Gson gson = new Gson();
+
+    public OpenAiLlmEnhancer(LlmConfig config) {
+        this.config = config;
+        this.client = new OpenAiClient(config);
+    }
+
+    @Override
+    public BusinessSemantic enhanceEndpoint(EndpointContext ctx) {
+        if (!isEnabled()) return null;
+
+        String prompt = buildEndpointPrompt(ctx);
+        List<OpenAiClient.ChatMessage> messages = List.of(
+                new OpenAiClient.ChatMessage("system", getEndpointSystemPrompt()),
+                new OpenAiClient.ChatMessage("user", prompt)
+        );
+
+        try {
+            String response = client.chat(messages);
+            return parseBusinessSemantic(response);
+        } catch (Exception e) {
+            // Log and return null on failure - fallback to rule-only output
+            return null;
+        }
+    }
+
+    @Override
+    public void enhanceErrorCode(ErrorCode errorCode, ErrorCodeContext ctx) {
+        if (!isEnabled()) return;
+
+        String prompt = buildErrorCodePrompt(ctx);
+        List<OpenAiClient.ChatMessage> messages = List.of(
+                new OpenAiClient.ChatMessage("system", getErrorCodeSystemPrompt()),
+                new OpenAiClient.ChatMessage("user", prompt)
+        );
+
+        try {
+            String response = client.chat(messages);
+            parseAndApplyErrorCodeEnhancement(response, errorCode);
+        } catch (Exception e) {
+            // Log and skip enhancement on failure
+        }
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return config.isEnabled() && config.getApiKey() != null && !config.getApiKey().isBlank();
+    }
+
+    private String getEndpointSystemPrompt() {
+        return """
+            你是一个 REST API 文档专家。根据提供的 Java 接口代码上下文，生成结构化的业务语义描述。
+            输出必须是合法的 JSON，且只包含以下字段（均为字符串，可为空）：
+            - function: 功能概述（一句话说明接口做什么）
+            - scenario: 业务场景（典型使用场景，如：用户登录、订单创建）
+            - implementationNotes: 实现要点（关键逻辑、校验规则、依赖服务）
+            - cautions: 注意事项（调用方需注意的事项）
+            不要输出任何其他文字，只输出 JSON。
+            """;
+    }
+
+    private String buildEndpointPrompt(EndpointContext ctx) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("接口信息：\n");
+        sb.append("- URI: ").append(ctx.getHttpMethod()).append(" ").append(ctx.getUri()).append("\n");
+        sb.append("- 方法名: ").append(ctx.getMethodName()).append("\n");
+        if (ctx.getJavadoc() != null && !ctx.getJavadoc().isBlank()) {
+            sb.append("- Javadoc: ").append(ctx.getJavadoc()).append("\n");
+        }
+        if (ctx.getParameterTypes() != null && !ctx.getParameterTypes().isEmpty()) {
+            sb.append("- 参数类型: ").append(String.join(", ", ctx.getParameterTypes())).append("\n");
+        }
+        if (ctx.getReturnType() != null) {
+            sb.append("- 返回类型: ").append(ctx.getReturnType()).append("\n");
+        }
+        if (ctx.getMethodBodySnippet() != null && !ctx.getMethodBodySnippet().isBlank()) {
+            sb.append("- 方法体片段:\n```\n").append(truncate(ctx.getMethodBodySnippet(), 1500)).append("\n```\n");
+        }
+        if (ctx.getCalledMethodNames() != null && !ctx.getCalledMethodNames().isEmpty()) {
+            sb.append("- 调用的方法: ").append(String.join(", ", ctx.getCalledMethodNames())).append("\n");
+        }
+        sb.append("\n请生成 JSON 格式的业务语义描述。");
+        return sb.toString();
+    }
+
+    private BusinessSemantic parseBusinessSemantic(String response) {
+        try {
+            String json = extractJson(response);
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            BusinessSemantic s = new BusinessSemantic();
+            s.setFunction(getString(obj, "function"));
+            s.setScenario(getString(obj, "scenario"));
+            s.setImplementationNotes(getString(obj, "implementationNotes"));
+            s.setCautions(getString(obj, "cautions"));
+            return s;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String getErrorCodeSystemPrompt() {
+        return """
+            你是一个 REST API 错误处理专家。根据提供的错误码和代码上下文，生成根因描述和处理建议。
+            输出必须是合法的 JSON，且只包含以下字段（均为字符串，可为空）：
+            - rootCause: 根因描述（导致该错误的典型原因，从业务层面说明）
+            - handlingSuggestion: 处理建议（API 调用方应如何应对：重试、参数修正、联系支持等）
+            - prevention: 预防建议（如何避免触发该错误）
+            不要输出任何其他文字，只输出 JSON。
+            """;
+    }
+
+    private String buildErrorCodePrompt(ErrorCodeContext ctx) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("错误码信息：\n");
+        sb.append("- code: ").append(ctx.getCode()).append("\n");
+        sb.append("- message: ").append(ctx.getMessage()).append("\n");
+        sb.append("- HTTP Status: ").append(ctx.getHttpStatus()).append("\n");
+        sb.append("- 异常类型: ").append(ctx.getExceptionType()).append("\n");
+        if (ctx.getExceptionHandlerSnippet() != null && !ctx.getExceptionHandlerSnippet().isBlank()) {
+            sb.append("- 异常处理逻辑:\n```\n").append(truncate(ctx.getExceptionHandlerSnippet(), 800)).append("\n```\n");
+        }
+        if (ctx.getThrowLocationSnippet() != null && !ctx.getThrowLocationSnippet().isBlank()) {
+            sb.append("- 抛出位置上下文:\n```\n").append(truncate(ctx.getThrowLocationSnippet(), 800)).append("\n```\n");
+        }
+        sb.append("\n请生成 JSON 格式的根因描述和处理建议。");
+        return sb.toString();
+    }
+
+    private void parseAndApplyErrorCodeEnhancement(String response, ErrorCode errorCode) {
+        try {
+            String json = extractJson(response);
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            errorCode.setRootCause(getString(obj, "rootCause"));
+            errorCode.setHandlingSuggestion(getString(obj, "handlingSuggestion"));
+            errorCode.setPrevention(getString(obj, "prevention"));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String getString(JsonObject obj, String key) {
+        if (!obj.has(key)) return null;
+        var el = obj.get(key);
+        return el == null || el.isJsonNull() ? null : el.getAsString();
+    }
+
+    private String extractJson(String text) {
+        text = text.trim();
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return text.substring(start, end + 1);
+        }
+        return text;
+    }
+
+    private String truncate(String s, int maxLen) {
+        if (s == null) return "";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+}
