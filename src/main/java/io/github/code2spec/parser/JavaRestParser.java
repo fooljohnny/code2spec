@@ -59,12 +59,12 @@ public class JavaRestParser {
         cu.accept(new VoidVisitorAdapter<Void>() {
             @Override
             public void visit(ClassOrInterfaceDeclaration c, Void arg) {
-                if (!isRestController(c)) return;
-                String classPath = getClassRequestMapping(c);
+                if (!isRestResource(c)) return;
+                String classPath = getClassPath(c);
                 for (MethodDeclaration m : c.getMethods()) {
-                    Endpoint ep = extractEndpoint(m, classPath);
+                    Endpoint ep = extractSpringEndpoint(m, classPath);
+                    if (ep == null) ep = extractJaxRsEndpoint(m, classPath);
                     if (ep != null) {
-                        // Build context for LLM
                         EndpointContext ctx = buildEndpointContext(m, ep);
                         if (llmEnhancer != null && llmEnhancer.isEnabled()) {
                             BusinessSemantic semantic = llmEnhancer.enhanceEndpoint(ctx);
@@ -78,11 +78,13 @@ public class JavaRestParser {
         }, null);
     }
 
-    private boolean isRestController(ClassOrInterfaceDeclaration c) {
+    private boolean isRestResource(ClassOrInterfaceDeclaration c) {
         return c.getAnnotationByName("RestController").isPresent()
                 || c.getAnnotationByName("Controller").isPresent()
+                || c.getAnnotationByName("Path").isPresent()
                 || hasAnnotation(c, "RestController")
-                || hasAnnotation(c, "Controller");
+                || hasAnnotation(c, "Controller")
+                || hasAnnotation(c, "Path");
     }
 
     private boolean hasAnnotation(ClassOrInterfaceDeclaration c, String name) {
@@ -90,25 +92,33 @@ public class JavaRestParser {
                 .anyMatch(a -> a.getNameAsString().equals(name));
     }
 
-    private String getClassRequestMapping(ClassOrInterfaceDeclaration c) {
-        return c.getAnnotationByName("RequestMapping")
-                .map(a -> {
-                    if (a instanceof NormalAnnotationExpr n) {
-                        return n.getPairs().stream()
-                                .filter(p -> p.getNameAsString().equals("value") || p.getNameAsString().equals("path"))
-                                .findFirst()
-                                .map(p -> extractStringValue(p.getValue()))
-                                .orElse("");
-                    }
-                    if (a instanceof SingleMemberAnnotationExpr s) {
-                        return extractStringValue(s.getMemberValue());
-                    }
-                    return "";
-                })
+    private String getClassPath(ClassOrInterfaceDeclaration c) {
+        String path = c.getAnnotationByName("RequestMapping")
+                .map(this::getMappingPath)
                 .orElse("");
+        if (path.isEmpty()) {
+            path = c.getAnnotationByName("Path")
+                    .map(this::getPathValue)
+                    .orElse("");
+        }
+        return path;
     }
 
-    private Endpoint extractEndpoint(MethodDeclaration m, String classPath) {
+    private String getPathValue(AnnotationExpr ann) {
+        if (ann instanceof NormalAnnotationExpr n) {
+            return n.getPairs().stream()
+                    .filter(p -> p.getNameAsString().equals("value"))
+                    .findFirst()
+                    .map(p -> extractStringValue(p.getValue()))
+                    .orElse("");
+        }
+        if (ann instanceof SingleMemberAnnotationExpr s) {
+            return extractStringValue(s.getMemberValue());
+        }
+        return "";
+    }
+
+    private Endpoint extractSpringEndpoint(MethodDeclaration m, String classPath) {
         String httpMethod = null;
         String path = "";
 
@@ -127,7 +137,26 @@ public class JavaRestParser {
         }
         if (httpMethod == null) return null;
 
-        String fullPath = normalizePath(classPath) + normalizePath(path);
+        return buildEndpoint(m, classPath, path, httpMethod, true);
+    }
+
+    private Endpoint extractJaxRsEndpoint(MethodDeclaration m, String classPath) {
+        String httpMethod = null;
+        for (String name : List.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")) {
+            if (m.getAnnotationByName(name).isPresent()) {
+                httpMethod = name;
+                break;
+            }
+        }
+        if (httpMethod == null) return null;
+
+        String path = m.getAnnotationByName("Path").map(this::getPathValue).orElse("");
+
+        return buildEndpoint(m, classPath, path, httpMethod, false);
+    }
+
+    private Endpoint buildEndpoint(MethodDeclaration m, String classPath, String methodPath, String httpMethod, boolean isSpring) {
+        String fullPath = normalizePath(classPath) + normalizePath(methodPath);
         if (fullPath.isEmpty()) fullPath = "/";
 
         Endpoint ep = new Endpoint();
@@ -137,30 +166,79 @@ public class JavaRestParser {
         ep.setSummary(extractJavadocSummary(m));
         ep.setDescription(extractJavadocDescription(m));
 
-        // Parameters
         m.getParameters().forEach(p -> {
             Parameter param = new Parameter();
             param.setName(p.getNameAsString());
             param.setType(p.getType().asString());
-            if (p.getAnnotationByName("PathVariable").isPresent()) {
-                param.setIn("path");
-                param.setRequired(true);
-            } else if (p.getAnnotationByName("RequestParam").isPresent()) {
-                param.setIn("query");
-                param.setRequired(p.getAnnotationByName("RequestParam")
-                        .flatMap(a -> a.asNormalAnnotationExpr().getPairs().stream()
-                                .filter(x -> x.getNameAsString().equals("required"))
-                                .findFirst())
-                        .map(pair -> !"false".equals(pair.getValue().toString()))
-                        .orElse(false));
-            } else if (p.getAnnotationByName("RequestBody").isPresent()) {
-                ep.setRequestBodyType(p.getType().asString());
+            if (isSpring) {
+                extractSpringParams(p, ep, param);
+            } else {
+                extractJaxRsParams(p, ep, param);
             }
             if (param.getIn() != null) ep.getParameters().add(param);
         });
 
         ep.setResponseType(m.getType().asString());
         return ep;
+    }
+
+    private void extractSpringParams(com.github.javaparser.ast.body.Parameter p, Endpoint ep, Parameter param) {
+        if (p.getAnnotationByName("PathVariable").isPresent()) {
+            param.setIn("path");
+            param.setRequired(true);
+        } else if (p.getAnnotationByName("RequestParam").isPresent()) {
+            param.setIn("query");
+            param.setRequired(p.getAnnotationByName("RequestParam")
+                    .flatMap(a -> a.asNormalAnnotationExpr().getPairs().stream()
+                            .filter(x -> x.getNameAsString().equals("required"))
+                            .findFirst())
+                    .map(pair -> !"false".equals(pair.getValue().toString()))
+                    .orElse(false));
+        } else if (p.getAnnotationByName("RequestBody").isPresent()) {
+            ep.setRequestBodyType(p.getType().asString());
+        }
+    }
+
+    private void extractJaxRsParams(com.github.javaparser.ast.body.Parameter p, Endpoint ep, Parameter param) {
+        if (p.getAnnotationByName("PathParam").isPresent()) {
+            param.setIn("path");
+            param.setRequired(true);
+            param.setName(extractJaxRsParamName(p, "PathParam"));
+        } else if (p.getAnnotationByName("QueryParam").isPresent()) {
+            param.setIn("query");
+            param.setRequired(false);
+            param.setName(extractJaxRsParamName(p, "QueryParam"));
+        } else if (p.getAnnotationByName("HeaderParam").isPresent()) {
+            param.setIn("header");
+            param.setRequired(false);
+            param.setName(extractJaxRsParamName(p, "HeaderParam"));
+        } else if (p.getAnnotationByName("FormParam").isPresent()) {
+            param.setIn("formData");
+            param.setRequired(false);
+            param.setName(extractJaxRsParamName(p, "FormParam"));
+        } else if (p.getAnnotationByName("BeanParam").isPresent()) {
+            // BeanParam typically contains multiple params, skip for now
+        } else {
+            // No JAX-RS param annotation = request body (for @POST, @PUT, etc.)
+            ep.setRequestBodyType(p.getType().asString());
+        }
+    }
+
+    private String extractJaxRsParamName(com.github.javaparser.ast.body.Parameter p, String annName) {
+        Optional<AnnotationExpr> ann = p.getAnnotationByName(annName);
+        if (ann.isEmpty()) return p.getNameAsString();
+        AnnotationExpr a = ann.get();
+        if (a instanceof NormalAnnotationExpr n) {
+            return n.getPairs().stream()
+                    .filter(x -> x.getNameAsString().equals("value"))
+                    .findFirst()
+                    .map(x -> extractStringValue(x.getValue()))
+                    .orElse(p.getNameAsString());
+        }
+        if (a instanceof SingleMemberAnnotationExpr s) {
+            return extractStringValue(s.getMemberValue());
+        }
+        return p.getNameAsString();
     }
 
     private String getRequestMappingMethod(AnnotationExpr ann) {
@@ -248,10 +326,15 @@ public class JavaRestParser {
             @Override
             public void visit(MethodDeclaration m, Void arg) {
                 m.getAnnotationByName("ExceptionHandler").ifPresent(ann -> {
-                    ErrorCode ec = extractErrorCodeFromHandler(m, ann);
-                    if (ec != null && result.getErrorCodes().stream().noneMatch(e -> e.getCode().equals(ec.getCode()))) {
-                        errorHandlerSnippets.put(ec.getCode(), m.getBody().map(b -> b.toString()).orElse(""));
-                        result.getErrorCodes().add(ec);
+                    List<String> exceptionTypes = extractExceptionTypesFromHandler(ann);
+                    String handlerSnippet = m.getBody().map(b -> b.toString()).orElse("");
+                    for (String exceptionType : exceptionTypes) {
+                        if (isValidExceptionType(exceptionType)
+                                && result.getErrorCodes().stream().noneMatch(e -> e.getCode().equals(exceptionType))) {
+                            ErrorCode ec = buildErrorCode(m, exceptionType);
+                            errorHandlerSnippets.put(exceptionType, handlerSnippet);
+                            result.getErrorCodes().add(ec);
+                        }
                     }
                 });
                 super.visit(m, arg);
@@ -259,24 +342,62 @@ public class JavaRestParser {
         }, null);
     }
 
-    private ErrorCode extractErrorCodeFromHandler(MethodDeclaration m, AnnotationExpr ann) {
-        String exceptionType = "";
+    private List<String> extractExceptionTypesFromHandler(AnnotationExpr ann) {
+        List<String> types = new ArrayList<>();
+        Expression valueExpr = null;
         if (ann instanceof NormalAnnotationExpr n) {
-            exceptionType = n.getPairs().stream()
+            valueExpr = n.getPairs().stream()
                     .filter(p -> p.getNameAsString().equals("value"))
                     .findFirst()
-                    .map(p -> p.getValue().toString())
-                    .orElse("");
+                    .map(p -> p.getValue())
+                    .orElse(null);
+        } else if (ann instanceof SingleMemberAnnotationExpr s) {
+            valueExpr = s.getMemberValue();
         }
-        if (exceptionType.isEmpty() && ann instanceof SingleMemberAnnotationExpr s) {
-            exceptionType = s.getMemberValue().toString();
+        if (valueExpr != null) {
+            collectExceptionTypes(valueExpr, types);
         }
-        if (exceptionType.endsWith(".class")) {
-            exceptionType = exceptionType.substring(0, exceptionType.length() - 6);
-        } else if (exceptionType.contains(".")) {
-            exceptionType = exceptionType.substring(exceptionType.lastIndexOf('.') + 1);
-        }
+        return types;
+    }
 
+    private void collectExceptionTypes(Expression exp, List<String> types) {
+        if (exp instanceof ArrayInitializerExpr arr) {
+            for (Expression e : arr.getValues()) {
+                collectExceptionTypes(e, types);
+            }
+        } else {
+            String name = extractTypeNameFromClassExpr(exp);
+            if (name != null && !name.isBlank()) types.add(name);
+        }
+    }
+
+    private String extractTypeNameFromClassExpr(Expression exp) {
+        if (exp instanceof FieldAccessExpr fa && "class".equals(fa.getNameAsString())) {
+            Expression scope = fa.getScope();
+            if (scope instanceof com.github.javaparser.ast.expr.NameExpr ne) {
+                return ne.getNameAsString();
+            }
+            if (scope instanceof FieldAccessExpr) {
+                return scope.toString();
+            }
+            return scope.toString().replace(".class", "").replaceAll(".*\\.", "");
+        }
+        if (exp instanceof com.github.javaparser.ast.expr.NameExpr ne) {
+            return ne.getNameAsString();
+        }
+        String s = exp.toString();
+        if (s.endsWith(".class")) return s.substring(0, s.length() - 6).replaceAll(".*\\.", "");
+        if (s.matches(".*[A-Za-z][A-Za-z0-9_]*")) return s.replaceAll(".*\\.([A-Za-z][A-Za-z0-9_]*)", "$1");
+        return null;
+    }
+
+    private boolean isValidExceptionType(String s) {
+        if (s == null || s.isBlank()) return false;
+        if (s.contains("}") || s.contains("{") || "class".equals(s)) return false;
+        return s.matches("[A-Za-z][A-Za-z0-9_]*");
+    }
+
+    private ErrorCode buildErrorCode(MethodDeclaration m, String exceptionType) {
         ErrorCode ec = new ErrorCode();
         ec.setCode(exceptionType);
         ec.setExceptionType(exceptionType);

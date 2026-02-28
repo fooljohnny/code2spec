@@ -89,10 +89,17 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-api -o ./outpu
 
 ### Java 注解
 
+**Spring MVC**：
 - **Controller**：`@RestController`、`@Controller`
 - **路径**：`@RequestMapping`、`@GetMapping`、`@PostMapping`、`@PutMapping`、`@DeleteMapping`、`@PatchMapping`
 - **参数**：`@PathVariable`、`@RequestParam`、`@RequestBody`
-- **异常**：`@ExceptionHandler`（在 `@ControllerAdvice` / `@RestControllerAdvice` 中）
+
+**JAX-RS**：
+- **资源**：`@Path`（类与方法级别）
+- **HTTP 方法**：`@GET`、`@POST`、`@PUT`、`@DELETE`、`@PATCH`、`@HEAD`、`@OPTIONS`
+- **参数**：`@PathParam`、`@QueryParam`、`@HeaderParam`、`@FormParam`（无注解参数视为请求体）
+
+**异常**：`@ExceptionHandler`（在 `@ControllerAdvice` / `@RestControllerAdvice` 中）
 
 ### OpenAPI/Swagger 文件
 
