@@ -4,9 +4,9 @@ package io.github.code2spec.llm;
  * Configuration for LLM API.
  */
 public class LlmConfig {
-    private String apiBaseUrl = "https://api.openai.com/v1";
+    private String apiBaseUrl = "https://api.groq.com/openai/v1";
     private String apiKey;
-    private String model = "gpt-4o-mini";
+    private String model = "groq/compound";
     private boolean enabled = true;
     private int maxTokens = 1024;
     private String proxy;

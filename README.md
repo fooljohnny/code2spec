@@ -30,22 +30,25 @@ java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output 
 
 ### 运行（启用 LLM 增强）
 
+默认使用 **Groq**（`groq/compound`），无日 token 上限，70K tokens/分钟：
+
 ```bash
 # 方式 1：环境变量
-export OPENAI_API_KEY=sk-xxx
+export GROQ_API_KEY=gsk_xxx
 java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output
 
 # 方式 2：命令行参数
 java -jar target/code2spec-jar-with-dependencies.jar <项目目录> -o ./output \
-  --llm-api-key sk-xxx \
-  --llm-api-base https://api.openai.com/v1 \
-  --llm-model gpt-4o-mini
+  --llm-api-key gsk_xxx \
+  --llm-api-base https://api.groq.com/openai/v1 \
+  --llm-model groq/compound
 ```
 
 ### 兼容其他 LLM 服务
 
 支持任意 OpenAI 兼容 API，例如：
 
+- **OpenAI**：`--llm-api-base https://api.openai.com/v1 --llm-model gpt-4o-mini`
 - **Azure OpenAI**：`--llm-api-base https://xxx.openai.azure.com/openai/deployments/xxx`
 - **通义千问**：`--llm-api-base https://dashscope.aliyuncs.com/compatible-mode/v1`
 - **DeepSeek**：`--llm-api-base https://api.deepseek.com/v1`
@@ -87,9 +90,9 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 |-----|------|--------|
 | `-o, --output` | 输出目录 | `./output` |
 | `-v, --verbose` | 打印 LLM 增强各步骤耗时（构建 prompt、请求前延迟、LLM 请求、解析响应等） | - |
-| `--llm-api-key` | LLM API Key | 环境变量 `OPENAI_API_KEY` |
-| `--llm-api-base` | API 基础 URL | `https://api.openai.com/v1` |
-| `--llm-model` | 模型名称 | `gpt-4o-mini` |
+| `--llm-api-key` | LLM API Key | 环境变量 `GROQ_API_KEY` 或 `OPENAI_API_KEY` |
+| `--llm-api-base` | API 基础 URL | `https://api.groq.com/openai/v1` |
+| `--llm-model` | 模型名称 | `groq/compound`（Groq，无日限、70K tokens/分钟） |
 | `--no-llm` | 禁用 LLM 增强 | - |
 | `--proxy` | HTTP 代理（host:port 或 http://host:port） | - |
 | `--llm-delay-ms` | 每次 LLM 请求前等待毫秒数，避免 429 限流 | 2000 |
