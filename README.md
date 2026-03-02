@@ -89,7 +89,7 @@ java -jar target/code2spec-jar-with-dependencies.jar samples/demo-jaxrs -o ./out
 | 参数 | 说明 | 默认值 |
 |-----|------|--------|
 | `-o, --output` | 输出目录 | `./output` |
-| `-v, --verbose` | 打印 LLM 增强各步骤耗时（构建 prompt、请求前延迟、LLM 请求、解析响应等） | - |
+| `-v, --verbose` | 打印 LLM 增强各步骤耗时及调用详情（URI、输入、输出、耗时、token 消耗） | - |
 | `--llm-api-key` | LLM API Key | 环境变量 `GROQ_API_KEY` 或 `OPENAI_API_KEY` |
 | `--llm-api-base` | API 基础 URL | `https://api.groq.com/openai/v1` |
 | `--llm-model` | 模型名称 | `groq/compound`（Groq，无日限、70K tokens/分钟） |
