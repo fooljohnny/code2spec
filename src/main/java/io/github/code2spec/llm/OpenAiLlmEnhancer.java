@@ -68,7 +68,10 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             if (progressReporter != null) progressReporter.verboseTiming("解析响应", System.currentTimeMillis() - t3);
             return semantic;
         } catch (Exception e) {
-            // Log and return null on failure - fallback to rule-only output
+            if (progressReporter != null) {
+                System.err.println("      [LLM 调用失败] " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                if (config.isVerbose()) e.printStackTrace(System.err);
+            }
             return null;
         }
     }
@@ -111,7 +114,10 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             parseAndApplyErrorCodeEnhancement(result.content, errorCode);
             if (progressReporter != null) progressReporter.verboseTiming("解析响应", System.currentTimeMillis() - t3);
         } catch (Exception e) {
-            // Log and skip enhancement on failure
+            if (progressReporter != null) {
+                System.err.println("      [LLM 调用失败] " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                if (config.isVerbose()) e.printStackTrace(System.err);
+            }
         }
     }
 
