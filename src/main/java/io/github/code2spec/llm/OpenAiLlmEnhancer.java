@@ -47,7 +47,20 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             if (progressReporter != null) progressReporter.verboseTiming("请求前延迟", System.currentTimeMillis() - t1);
 
             long t2 = System.currentTimeMillis();
-            OpenAiClient.ChatResult result = client.chat(messages);
+            OpenAiClient.ChatResult result;
+            try {
+                result = client.chat(messages);
+            } catch (Exception e) {
+                long failDuration = System.currentTimeMillis() - t2;
+                if (progressReporter != null) {
+                    progressReporter.reportLlmFailure("端点", ctx.getHttpMethod() + " " + ctx.getUri(),
+                            buildLlmUri(), buildInputFromMessages(messages), failDuration, e);
+                } else {
+                    System.err.println("      [LLM 调用失败] 端点 " + ctx.getHttpMethod() + " " + ctx.getUri()
+                            + ": " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+                return null;
+            }
             long llmDurationMs = System.currentTimeMillis() - t2;
             if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", llmDurationMs);
 
@@ -68,9 +81,12 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             if (progressReporter != null) progressReporter.verboseTiming("解析响应", System.currentTimeMillis() - t3);
             return semantic;
         } catch (Exception e) {
+            long failDuration = System.currentTimeMillis() - t0;
             if (progressReporter != null) {
+                progressReporter.reportLlmFailure("端点", ctx.getHttpMethod() + " " + ctx.getUri(),
+                        buildLlmUri(), buildInputFromMessages(messages), failDuration, e);
+            } else {
                 System.err.println("      [LLM 调用失败] " + e.getClass().getSimpleName() + ": " + e.getMessage());
-                if (config.isVerbose()) e.printStackTrace(System.err);
             }
             return null;
         }
@@ -94,7 +110,20 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             if (progressReporter != null) progressReporter.verboseTiming("请求前延迟", System.currentTimeMillis() - t1);
 
             long t2 = System.currentTimeMillis();
-            OpenAiClient.ChatResult result = client.chat(messages);
+            OpenAiClient.ChatResult result;
+            try {
+                result = client.chat(messages);
+            } catch (Exception e) {
+                long failDuration = System.currentTimeMillis() - t2;
+                if (progressReporter != null) {
+                    progressReporter.reportLlmFailure("错误码", errorCode.getCode(),
+                            buildLlmUri(), buildInputFromMessages(messages), failDuration, e);
+                } else {
+                    System.err.println("      [LLM 调用失败] 错误码 " + errorCode.getCode()
+                            + ": " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+                return;
+            }
             long llmDurationMs = System.currentTimeMillis() - t2;
             if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", llmDurationMs);
 
@@ -114,9 +143,12 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
             parseAndApplyErrorCodeEnhancement(result.content, errorCode);
             if (progressReporter != null) progressReporter.verboseTiming("解析响应", System.currentTimeMillis() - t3);
         } catch (Exception e) {
+            long failDuration = System.currentTimeMillis() - t0;
             if (progressReporter != null) {
+                progressReporter.reportLlmFailure("错误码", errorCode.getCode(),
+                        buildLlmUri(), buildInputFromMessages(messages), failDuration, e);
+            } else {
                 System.err.println("      [LLM 调用失败] " + e.getClass().getSimpleName() + ": " + e.getMessage());
-                if (config.isVerbose()) e.printStackTrace(System.err);
             }
         }
     }

@@ -111,6 +111,21 @@ public class ProgressReporter {
         return s.length() <= max ? s : s.substring(0, max) + "...";
     }
 
+    /**
+     * 打印 LLM 调用失败信息（无论是否 -v 都会显示）。
+     */
+    public void reportLlmFailure(String type, String target, String uri, String input, long durationMs, Exception e) {
+        System.err.println("      [LLM 调用失败] " + type + " " + target);
+        System.err.println("        URI: " + (uri != null ? uri : ""));
+        String in = input != null ? input : "";
+        System.err.println("        输入: " + truncateForLog(in, 400) + (in.length() > 400 ? " ... (共 " + in.length() + " 字)" : ""));
+        System.err.println("        失败: " + e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : ""));
+        System.err.println("        耗时: " + durationMs + " ms");
+        if (verbose && e != null) {
+            e.printStackTrace(System.err);
+        }
+    }
+
     public long getPromptTokens() { return promptTokens; }
     public long getCompletionTokens() { return completionTokens; }
     public long getTotalTokens() { return promptTokens + completionTokens; }
