@@ -87,6 +87,30 @@ public class ProgressReporter {
                 + "  prompt=" + promptTokens + " completion=" + completionTokens + " total=" + (promptTokens + completionTokens));
     }
 
+    private static final int VERBOSE_INPUT_MAX = 1200;
+    private static final int VERBOSE_OUTPUT_MAX = 600;
+
+    /**
+     * -v 模式下打印 LLM 调用详情：URI、输入、输出、耗时、token 消耗。
+     */
+    public void verboseLlmDetail(String uri, String input, String output, long durationMs, int promptTokens, int completionTokens) {
+        if (!verbose) return;
+        System.out.println("        [LLM 调用详情]");
+        System.out.println("        URI: " + uri);
+        String in = input != null ? input : "";
+        System.out.println("        输入: " + truncateForLog(in, VERBOSE_INPUT_MAX) + (in.length() > VERBOSE_INPUT_MAX ? " ... (共 " + in.length() + " 字)" : ""));
+        String out = output != null ? output : "";
+        System.out.println("        输出: " + truncateForLog(out, VERBOSE_OUTPUT_MAX) + (out.length() > VERBOSE_OUTPUT_MAX ? " ... (共 " + out.length() + " 字)" : ""));
+        System.out.println("        耗时: " + durationMs + " ms");
+        System.out.println("        Token: prompt=" + promptTokens + " completion=" + completionTokens + " total=" + (promptTokens + completionTokens));
+    }
+
+    private static String truncateForLog(String s, int max) {
+        if (s == null) return "";
+        s = s.replace("\r\n", "\n").replace("\r", "\n");
+        return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
     public long getPromptTokens() { return promptTokens; }
     public long getCompletionTokens() { return completionTokens; }
     public long getTotalTokens() { return promptTokens + completionTokens; }

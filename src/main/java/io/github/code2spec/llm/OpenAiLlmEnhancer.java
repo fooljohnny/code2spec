@@ -48,11 +48,19 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
 
             long t2 = System.currentTimeMillis();
             OpenAiClient.ChatResult result = client.chat(messages);
-            if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", System.currentTimeMillis() - t2);
+            long llmDurationMs = System.currentTimeMillis() - t2;
+            if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", llmDurationMs);
 
             if (progressReporter != null) {
                 progressReporter.reportLlmCall("端点", ctx.getHttpMethod() + " " + ctx.getUri(),
                         result.promptTokens, result.completionTokens);
+                progressReporter.verboseLlmDetail(
+                        buildLlmUri(),
+                        buildInputFromMessages(messages),
+                        result.content,
+                        llmDurationMs,
+                        result.promptTokens,
+                        result.completionTokens);
             }
 
             long t3 = System.currentTimeMillis();
@@ -84,11 +92,19 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
 
             long t2 = System.currentTimeMillis();
             OpenAiClient.ChatResult result = client.chat(messages);
-            if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", System.currentTimeMillis() - t2);
+            long llmDurationMs = System.currentTimeMillis() - t2;
+            if (progressReporter != null) progressReporter.verboseTiming("LLM 请求", llmDurationMs);
 
             if (progressReporter != null) {
                 progressReporter.reportLlmCall("错误码", errorCode.getCode(),
                         result.promptTokens, result.completionTokens);
+                progressReporter.verboseLlmDetail(
+                        buildLlmUri(),
+                        buildInputFromMessages(messages),
+                        result.content,
+                        llmDurationMs,
+                        result.promptTokens,
+                        result.completionTokens);
             }
 
             long t3 = System.currentTimeMillis();
@@ -218,6 +234,22 @@ public class OpenAiLlmEnhancer implements LlmEnhancer {
     private String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    private String buildLlmUri() {
+        String base = config.getApiBaseUrl();
+        if (base == null) base = "";
+        base = base.replaceAll("/$", "");
+        return base + "/chat/completions";
+    }
+
+    private String buildInputFromMessages(List<OpenAiClient.ChatMessage> messages) {
+        if (messages == null || messages.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (OpenAiClient.ChatMessage m : messages) {
+            sb.append("[").append(m.role).append("]\n").append(m.content != null ? m.content : "").append("\n\n");
+        }
+        return sb.toString().trim();
     }
 
     private void delayBeforeLlmRequest() {
