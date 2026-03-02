@@ -25,10 +25,10 @@ public class Code2SpecCommand implements Runnable {
     @CommandLine.Option(names = {"--llm-api-key"}, description = "LLM API Key (OpenAI 兼容)")
     private String llmApiKey;
 
-    @CommandLine.Option(names = {"--llm-api-base"}, description = "LLM API 基础 URL", defaultValue = "https://api.openai.com/v1")
+    @CommandLine.Option(names = {"--llm-api-base"}, description = "LLM API 基础 URL", defaultValue = "https://api.groq.com/openai/v1")
     private String llmApiBase;
 
-    @CommandLine.Option(names = {"--llm-model"}, description = "LLM 模型", defaultValue = "gpt-4o-mini")
+    @CommandLine.Option(names = {"--llm-model"}, description = "LLM 模型（默认 groq/compound，无日限、70K tokens/分钟）", defaultValue = "groq/compound")
     private String llmModel;
 
     @CommandLine.Option(names = {"--no-llm"}, description = "禁用 LLM 增强，仅使用规则提取")
@@ -77,13 +77,14 @@ public class Code2SpecCommand implements Runnable {
             llmConfig.setApiBaseUrl(llmApiBase);
             llmConfig.setModel(llmModel);
         } else if (!noLlm) {
-            String envKey = System.getenv("OPENAI_API_KEY");
+            String envKey = System.getenv("GROQ_API_KEY");
+            if (envKey == null || envKey.isBlank()) envKey = System.getenv("OPENAI_API_KEY");
             if (envKey != null && !envKey.isBlank()) {
                 llmConfig.setApiKey(envKey);
                 llmConfig.setApiBaseUrl(llmApiBase);
                 llmConfig.setModel(llmModel);
             } else {
-                System.out.println("提示: 未配置 LLM API Key，将仅使用规则提取。可通过 --llm-api-key 或环境变量 OPENAI_API_KEY 配置。");
+                System.out.println("提示: 未配置 LLM API Key，将仅使用规则提取。可通过 --llm-api-key 或环境变量 GROQ_API_KEY / OPENAI_API_KEY 配置。");
                 llmConfig.setEnabled(false);
             }
         }
