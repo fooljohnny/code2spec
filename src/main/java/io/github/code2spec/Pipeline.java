@@ -29,6 +29,9 @@ public class Pipeline {
 
     public void run() throws Exception {
         boolean verbose = llmConfig != null && llmConfig.isVerbose();
+        if (verbose) {
+            System.out.println("[-v] 详细模式已启用，将打印 LLM 调用详情（URI、输入、输出、耗时、token）");
+        }
         ProgressReporter progress = new ProgressReporter(verbose);
         LlmEnhancer enhancer = createEnhancer(progress);
         int callChainDepth = llmConfig != null ? llmConfig.getCallChainDepth() : 2;

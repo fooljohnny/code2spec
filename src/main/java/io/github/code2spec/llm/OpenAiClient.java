@@ -79,11 +79,13 @@ public class OpenAiClient {
             try (Response response = httpClient.newCall(request).execute()) {
                 if (response.code() == 429 && attempt < MAX_RETRIES_ON_429) {
                     response.close();
+                    System.err.println("        [LLM 429] 限流，第 " + (attempt + 1) + " 次重试，等待 " + retryWaitMs + " ms 后重试");
                     Thread.sleep(retryWaitMs);
                     continue;
                 }
                 if (!response.isSuccessful()) {
-                    throw new IOException("LLM API error: " + response.code() + " " + response.body().string());
+                    String body = response.body() != null ? response.body().string() : "";
+                    throw new IOException("LLM API error: " + response.code() + " " + body);
                 }
                 String responseBody = response.body().string();
                 JsonObject json = JsonParser.parseString(responseBody).getAsJsonObject();
@@ -101,6 +103,9 @@ public class OpenAiClient {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted while waiting for retry", e);
+            } catch (IOException e) {
+                System.err.println("        [LLM 请求失败] 第 " + (attempt + 1) + "/" + (MAX_RETRIES_ON_429 + 1) + " 次尝试: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                throw e;
             }
         }
         throw new IOException("LLM API rate limited (429) after " + (MAX_RETRIES_ON_429 + 1) + " attempts");
